@@ -1,19 +1,18 @@
 const pool = require("../config/db");
 
-// POST /api/enrollments - student enrolls in a course
+// POST /api/enrollments (student only)
 async function enrollInCourse(req, res) {
     try {
-        const { courseid } = req.body;
-        const student_id = req.user.id;
-        if (!courseid) return res.status(400).json({ error: "courseid is required" });
+        const { course_id } = req.body;
+        if (!course_id) return res.status(400).json({ error: "course_id is required" });
 
         const result = await pool.query(
-            "INSERT INTO enrollments (student_id, courseid) VALUES ($1, $2) RETURNING id",
-            [student_id, courseid]
+            "INSERT INTO enrollments (student_id, course_id) VALUES ($1, $2) RETURNING *",
+            [req.user.id, course_id]
         );
-        res.status(201).json({ message: "Enrolled successfully", enrollmentId: result.rows[0].id });
+        res.status(201).json({ message: "Enrolled successfully", enrollment: result.rows[0] });
     } catch (err) {
-        if (err.code === "23505") { // unique_violation in Postgres
+        if (err.code === "23505") {
             return res.status(409).json({ error: "Already enrolled in this course" });
         }
         console.error(err);
@@ -21,16 +20,16 @@ async function enrollInCourse(req, res) {
     }
 }
 
-// GET /api/enrollments/course/:courseid - instructor view: who's enrolled
+// GET /api/enrollments/course/:courseId - teacher: who's enrolled in my course
 async function getEnrollmentsForCourse(req, res) {
     try {
-        const { courseid } = req.params;
+        const { courseId } = req.params;
         const result = await pool.query(`
-            SELECT s.s_id, s.first_name, s.last_name, s.email, e.enrollment_date, e.grade
+            SELECT u.user_id, u.first_name, u.last_name, u.email, u.avatar_url, e.enrolled_at
             FROM enrollments e
-            JOIN students s ON e.student_id = s.s_id
-            WHERE e.courseid = $1
-        `, [courseid]);
+            JOIN users u ON e.student_id = u.user_id
+            WHERE e.course_id = $1
+        `, [courseId]);
         res.json(result.rows);
     } catch (err) {
         console.error(err);
@@ -38,17 +37,4 @@ async function getEnrollmentsForCourse(req, res) {
     }
 }
 
-// PUT /api/enrollments/:id/grade - instructor sets a grade
-async function setGrade(req, res) {
-    try {
-        const { id } = req.params;
-        const { grade } = req.body;
-        await pool.query("UPDATE enrollments SET grade = $1 WHERE id = $2", [grade, id]);
-        res.json({ message: "Grade updated" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to update grade" });
-    }
-}
-
-module.exports = { enrollInCourse, getEnrollmentsForCourse, setGrade };
+module.exports = { enrollInCourse, getEnrollmentsForCourse };

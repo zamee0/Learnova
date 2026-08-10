@@ -5,8 +5,8 @@ const { getAllCourses, getCourseById, getMyCourses, getTeachingCourses, createCo
 
 router.get("/", getAllCourses);
 router.get("/my", verifyToken, verifyRole("student"), getMyCourses);
-router.get("/teaching", verifyToken, verifyRole("instructor"), getTeachingCourses);
+router.get("/teaching", verifyToken, verifyRole("teacher"), getTeachingCourses);
 router.get("/:id", getCourseById);
-router.post("/", verifyToken, verifyRole("instructor"), createCourse);
+router.post("/", verifyToken, verifyRole("teacher"), createCourse);
 
 module.exports = router;

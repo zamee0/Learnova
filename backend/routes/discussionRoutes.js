@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { verifyToken, verifyRole } = require("../middleware/authMiddleware");
-// const { } = require("../controllers/discussionController");
+const { verifyToken } = require("../middleware/authMiddleware");
+const { getDiscussionsForCourse, createDiscussion, getReplies, postReply } = require("../controllers/discussionController");
 
-// TODO: add routes once discussionController is implemented
+router.get("/course/:courseId", verifyToken, getDiscussionsForCourse);
+router.post("/", verifyToken, createDiscussion);
+router.get("/:id/replies", verifyToken, getReplies);
+router.post("/:id/replies", verifyToken, postReply);
 
 module.exports = router;

@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { verifyToken, verifyRole } = require("../middleware/authMiddleware");
-// const { } = require("../controllers/messageController");
+const { verifyToken } = require("../middleware/authMiddleware");
+const { sendMessage, getConversation, getConversationList } = require("../controllers/messageController");
 
-// TODO: add routes once messageController is implemented
+router.get("/", verifyToken, getConversationList);
+router.get("/:otherUserId", verifyToken, getConversation);
+router.post("/", verifyToken, sendMessage);
 
 module.exports = router;

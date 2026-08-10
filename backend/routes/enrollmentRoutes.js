@@ -1,10 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const { verifyToken, verifyRole } = require("../middleware/authMiddleware");
-const { enrollInCourse, getEnrollmentsForCourse, setGrade } = require("../controllers/enrollmentController");
+const { enrollInCourse, getEnrollmentsForCourse } = require("../controllers/enrollmentController");
 
 router.post("/", verifyToken, verifyRole("student"), enrollInCourse);
-router.get("/course/:courseid", verifyToken, verifyRole("instructor"), getEnrollmentsForCourse);
-router.put("/:id/grade", verifyToken, verifyRole("instructor"), setGrade);
+router.get("/course/:courseId", verifyToken, verifyRole("teacher"), getEnrollmentsForCourse);
 
 module.exports = router;

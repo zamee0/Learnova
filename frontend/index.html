@@ -1,11 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+<meta charset="UTF-8">
+<title>Document</title>
 </head>
 <body>
-    
+
+
+<section>
+    <h2>1. Signup / Login</h2>
+    <div class="row">
+        <input id="su_first" placeholder="First name">
+        <input id="su_last" placeholder="Last name">
+    </div>
+    <input id="su_email" placeholder="Email">
+    <input id="su_password" type="password" placeholder="Password">
+    <select id="su_role">
+        <option value="student">student</option>
+        <option value="teacher">teacher</option>
+    </select>
+    <button onclick="signup()">Sign up</button>
+    <button onclick="login()">Login</button>
+    <p id="tokenBox">Not logged in</p>
+</section>
+
+<section>
+    <h2>2. Browse Courses</h2>
+    <button onclick="loadCourses()">Load all courses</button>
+    <div id="courseList"></div>
+</section>
+
+<section>
+    <h2>3. My Profile</h2>
+    <button onclick="loadProfile()">Load my profile</button>
+    <div id="profileBox"></div>
+</section>
+
+
+<script>
+const API = "/api";
+let token = localStorage.getItem("token") || "";
+document.getElementById("tokenBox").textContent = token ? "Logged in, token stored." : "Not logged in";
+
+function log(data) {
+    document.getElementById("log").textContent = JSON.stringify(data, null, 2);
+}
+
+async function call(endpoint, method = "GET", body = null, auth = false) {
+    const headers = { "Content-Type": "application/json" };
+    if (auth && token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(API + endpoint, { method, headers, body: body ? JSON.stringify(body) : null });
+    const data = await res.json();
+    log(data);
+    return data;
+}
+
+async function signup() {
+    const data = await call("/auth/signup", "POST", {
+        first_name: document.getElementById("su_first").value,
+        last_name: document.getElementById("su_last").value,
+        email: document.getElementById("su_email").value,
+        password: document.getElementById("su_password").value,
+        role: document.getElementById("su_role").value
+    });
+    if (data.token) {
+        token = data.token;
+        localStorage.setItem("token", token);
+        document.getElementById("tokenBox").textContent = "Logged in as " + data.user.email;
+    }
+}
+
+async function login() {
+    const data = await call("/auth/login", "POST", {
+        email: document.getElementById("su_email").value,
+        password: document.getElementById("su_password").value
+    });
+    if (data.token) {
+        token = data.token;
+        localStorage.setItem("token", token);
+        document.getElementById("tokenBox").textContent = "Logged in as " + data.user.email;
+    }
+}
+
+async function loadCourses() {
+    const data = await call("/courses");
+    const list = document.getElementById("courseList");
+    list.innerHTML = "";
+    if (Array.isArray(data)) {
+        data.forEach(c => {
+            const div = document.createElement("div");
+            div.style.padding = "6px 0";
+            div.style.borderTop = "1px solid #eee";
+            div.textContent = `${c.title} — ${c.teacher_name} — ${c.category} — ${c.enrolled_count} enrolled`;
+            list.appendChild(div);
+        });
+    }
+}
+
+async function loadProfile() {
+    const data = await call("/users/me", "GET", null, true);
+    document.getElementById("profileBox").textContent = JSON.stringify(data, null, 2);
+}
+</script>
 </body>
 </html>
