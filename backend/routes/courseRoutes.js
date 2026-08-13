@@ -5,6 +5,7 @@ const { getAllCourses, getCourseById, getMyCourses, getTeachingCourses, createCo
 
 router.get("/", getAllCourses);
 router.get("/my", verifyToken, verifyRole("student"), getMyCourses);
+router.get("/my-courses", verifyToken, verifyRole("student"), getMyCourses); // alias
 router.get("/teaching", verifyToken, verifyRole("teacher"), getTeachingCourses);
 router.get("/:id", getCourseById);
 router.post("/", verifyToken, verifyRole("teacher"), createCourse);

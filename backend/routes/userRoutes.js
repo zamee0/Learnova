@@ -4,6 +4,7 @@ const { verifyToken } = require("../middleware/authMiddleware");
 const { getMyProfile, getUserProfile, updateMyProfile, searchUsers } = require("../controllers/userController");
 
 router.get("/me", verifyToken, getMyProfile);
+router.get("/profile", verifyToken, getMyProfile); // alias
 router.put("/me", verifyToken, updateMyProfile);
 router.get("/search", verifyToken, searchUsers);
 router.get("/:id", verifyToken, getUserProfile);

@@ -62,4 +62,27 @@ async function createAnnouncement(req, res) {
     }
 }
 
-module.exports = { getAnnouncementsForCourse, createAnnouncement };
+// GET /api/announcements/recent - student: latest from enrolled courses; teacher: latest from own courses
+async function getRecentAnnouncements(req, res) {
+    try {
+        const sql = req.user.role === "student"
+            ? `SELECT a.*, c.title AS course_title, CONCAT(u.first_name,' ',u.last_name) AS teacher_name
+               FROM announcements a
+               JOIN courses c ON a.course_id = c.course_id
+               JOIN users u ON a.teacher_id = u.user_id
+               WHERE a.course_id IN (SELECT course_id FROM enrollments WHERE student_id = $1)
+               ORDER BY a.created_at DESC LIMIT 20`
+            : `SELECT a.*, c.title AS course_title
+               FROM announcements a
+               JOIN courses c ON a.course_id = c.course_id
+               WHERE a.teacher_id = $1
+               ORDER BY a.created_at DESC LIMIT 20`;
+        const result = await pool.query(sql, [req.user.id]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch recent announcements" });
+    }
+}
+
+module.exports = { getAnnouncementsForCourse, createAnnouncement, getRecentAnnouncements };

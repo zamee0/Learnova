@@ -14,9 +14,10 @@ app.use(express.static(path.join(__dirname, "..", "frontend")));
 // Routes
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
+app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/courses", require("./routes/courseRoutes"));
 app.use("/api/enrollments", require("./routes/enrollmentRoutes"));
-app.use("/api/announcements", require("./routes/announcementRoutes"));
+app.use("/apigit /announcements", require("./routes/announcementRoutes"));
 app.use("/api/discussions", require("./routes/discussionRoutes"));
 app.use("/api/friends", require("./routes/friendRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));

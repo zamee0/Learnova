@@ -37,4 +37,20 @@ async function getEnrollmentsForCourse(req, res) {
     }
 }
 
-module.exports = { enrollInCourse, getEnrollmentsForCourse };
+// DELETE /api/enrollments/:id (student only, must own the enrollment)
+async function unenroll(req, res) {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            "DELETE FROM enrollments WHERE enrollment_id = $1 AND student_id = $2 RETURNING *",
+            [id, req.user.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: "Enrollment not found" });
+        res.json({ message: "Unenrolled successfully" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to unenroll" });
+    }
+}
+
+module.exports = { enrollInCourse, getEnrollmentsForCourse, unenroll };
