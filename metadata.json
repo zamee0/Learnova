@@ -1,0 +1,6 @@
+{
+  "name": "Learnova",
+  "description": "Learning Management System backend API with course, enrollment, lesson, and authentication services.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

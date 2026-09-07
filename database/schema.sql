@@ -104,6 +104,31 @@ CREATE TABLE submissions (
     UNIQUE (student_id, exam_id)
 );
 
+-- 11. Discussions (Course-scoped Q&A / forum threads)
+CREATE TABLE discussions (
+    id SERIAL PRIMARY KEY,
+    courseid INT NOT NULL REFERENCES courses(courseid) ON DELETE CASCADE,
+    lesson_id INT REFERENCES lessons(id) ON DELETE SET NULL,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    author_role VARCHAR(20) NOT NULL CHECK (author_role IN ('student', 'instructor')),
+    student_id INT REFERENCES students(s_id) ON DELETE CASCADE,
+    instructor_id INT REFERENCES instructors(i_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 12. Discussion Replies (Responses / answers in a discussion thread)
+CREATE TABLE discussion_replies (
+    id SERIAL PRIMARY KEY,
+    discussion_id INT NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    author_role VARCHAR(20) NOT NULL CHECK (author_role IN ('student', 'instructor')),
+    student_id INT REFERENCES students(s_id) ON DELETE CASCADE,
+    instructor_id INT REFERENCES instructors(i_id) ON DELETE CASCADE,
+    is_instructor_answer BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ---------- Seed data for quick testing ----------
 INSERT INTO categories (name, availability) VALUES
 ('Web Development', TRUE), ('Data Science', TRUE), ('Mathematics', TRUE);
@@ -130,3 +155,10 @@ INSERT INTO resources (lesson_id, title, resource_url, filesize) VALUES
 
 INSERT INTO exams (courseid, title, total_marks) VALUES
 (1, 'Midterm - SQL Basics', 50);
+
+INSERT INTO discussions (courseid, lesson_id, title, content, author_role, student_id) VALUES
+(1, 1, 'Question about primary keys in PostgreSQL', 'Can a primary key be composed of multiple columns (composite key)?', 'student', 1);
+
+INSERT INTO discussion_replies (discussion_id, content, author_role, instructor_id, is_instructor_answer) VALUES
+(1, 'Yes! You can define a composite primary key using PRIMARY KEY (col1, col2).', 'instructor', 1, TRUE);
+
