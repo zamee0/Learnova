@@ -1,7 +1,3 @@
--- ============================================================
--- LEARNOVA — PostgreSQL Schema (Backend Milestone: 50%)
--- Run:  psql -U your_db_user -d learnova -f database/schema.sql
--- ============================================================
 
 DROP TABLE IF EXISTS notifications, friend_requests, friendships, messages,
     discussion_replies, discussions, announcements, enrollments, courses, users CASCADE;
@@ -117,9 +113,6 @@ CREATE INDEX idx_enrollments_course ON enrollments(course_id);
 CREATE INDEX idx_messages_pair ON messages(sender_id, receiver_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 
--- ============================================================
--- SEED DATA
--- ============================================================
 
 -- Passwords below are bcrypt hashes of "password123" (10 rounds) — use these to log in while testing.
 INSERT INTO users (first_name, last_name, email, password_hash, role, avatar_url, bio) VALUES

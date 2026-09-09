@@ -1,98 +1,227 @@
 const pool = require("../config/db");
 
-// Checks the user is either the course's teacher or an enrolled student
-async function canAccessCourse(courseId, userId) {
-    const course = await pool.query("SELECT teacher_id FROM courses WHERE course_id = $1", [courseId]);
-    if (course.rows.length === 0) return false;
-    if (course.rows[0].teacher_id === userId) return true;
+// Verify if user is course instructor OR an enrolled student
+async function checkCourseAccess(userId, courseId) {
+  const check = await pool.query(
+    `SELECT 1 FROM courses WHERE id = $1 AND teacher_id = $2
+     UNION
+     SELECT 1 FROM enrollments WHERE course_id = $1 AND user_id = $2`,
+    [courseId, userId]
+  );
+  return check.rows.length > 0;
+}
 
-    const enrollment = await pool.query(
-        "SELECT 1 FROM enrollments WHERE course_id = $1 AND student_id = $2", [courseId, userId]
+// Get all discussions across user's accessible courses (Discussion Hub)
+exports.getAllMyDiscussions = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const query = `
+      SELECT 
+        d.id,
+        d.course_id,
+        d.title,
+        d.content,
+        d.created_at,
+        c.title AS course_title,
+        u.first_name || ' ' || u.last_name AS author_name,
+        u.role AS author_role,
+        COUNT(r.id)::int AS reply_count
+      FROM discussions d
+      JOIN courses c ON d.course_id = c.id
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN discussion_replies r ON d.id = r.discussion_id
+      WHERE d.course_id IN (
+        SELECT course_id FROM enrollments WHERE user_id = $1
+        UNION
+        SELECT id FROM courses WHERE teacher_id = $1
+      )
+      GROUP BY d.id, c.title, u.first_name, u.last_name, u.role
+      ORDER BY d.created_at DESC
+    `;
+
+    const result = await pool.query(query, [userId]);
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get discussions for a specific course
+exports.getDiscussionsByCourse = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const courseId = parseInt(req.params.courseId, 10);
+
+    if (isNaN(courseId)) {
+      return res.status(400).json({ error: "Invalid course ID" });
+    }
+
+    const hasAccess = await checkCourseAccess(userId, courseId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You must be enrolled in this course to view discussions." });
+    }
+
+    const query = `
+      SELECT 
+        d.id,
+        d.course_id,
+        d.title,
+        d.content,
+        d.created_at,
+        u.first_name || ' ' || u.last_name AS author_name,
+        u.role AS author_role,
+        u.avatar_url AS author_avatar,
+        COUNT(r.id)::int AS reply_count
+      FROM discussions d
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN discussion_replies r ON d.id = r.discussion_id
+      WHERE d.course_id = $1
+      GROUP BY d.id, u.first_name, u.last_name, u.role, u.avatar_url
+      ORDER BY d.created_at DESC
+    `;
+
+    const result = await pool.query(query, [courseId]);
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Create a new discussion thread
+exports.createDiscussion = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { course_id, title, content } = req.body;
+    const courseId = parseInt(course_id, 10);
+
+    if (isNaN(courseId) || !title || !content) {
+      return res.status(400).json({ error: "Course ID, title, and content are required." });
+    }
+
+    const hasAccess = await checkCourseAccess(userId, courseId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "Access denied. You must be enrolled or teaching this course to post." });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO discussions (course_id, user_id, title, content)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [courseId, userId, title.trim(), content.trim()]
     );
-    return enrollment.rows.length > 0;
-}
 
-// GET /api/discussions/course/:courseId
-async function getDiscussionsForCourse(req, res) {
-    try {
-        const { courseId } = req.params;
-        const result = await pool.query(`
-            SELECT d.*, CONCAT(u.first_name, ' ', u.last_name) AS author_name, u.role AS author_role, u.avatar_url,
-                   (SELECT COUNT(*) FROM discussion_replies r WHERE r.discussion_id = d.discussion_id) AS reply_count
-            FROM discussions d
-            JOIN users u ON d.user_id = u.user_id
-            WHERE d.course_id = $1
-            ORDER BY d.created_at DESC
-        `, [courseId]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch discussions" });
+    // Notify instructor if student posted
+    const courseOwner = await pool.query("SELECT teacher_id, title FROM courses WHERE id = $1", [courseId]);
+    if (courseOwner.rows.length > 0 && courseOwner.rows[0].teacher_id !== userId) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, message, type)
+         VALUES ($1, $2, $3, 'discussion')`,
+        [courseOwner.rows[0].teacher_id, 'New Course Discussion', `A new discussion was posted in "${courseOwner.rows[0].title}".`]
+      );
     }
-}
 
-// POST /api/discussions - start a new thread (must be enrolled or be the teacher)
-async function createDiscussion(req, res) {
-    try {
-        const { course_id, title, content } = req.body;
-        if (!course_id || !title || !content) {
-            return res.status(400).json({ error: "course_id, title and content are required" });
-        }
+    return res.status(201).json({
+      message: "Discussion created successfully",
+      discussion: insertResult.rows[0]
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
-        const allowed = await canAccessCourse(course_id, req.user.id);
-        if (!allowed) return res.status(403).json({ error: "You must be enrolled in this course to post" });
+// Get replies for a discussion
+exports.getReplies = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const discussionId = parseInt(req.params.id, 10);
 
-        const result = await pool.query(
-            `INSERT INTO discussions (course_id, user_id, title, content) VALUES ($1, $2, $3, $4) RETURNING *`,
-            [course_id, req.user.id, title, content]
-        );
-        res.status(201).json({ message: "Discussion posted", discussion: result.rows[0] });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to post discussion" });
+    if (isNaN(discussionId)) {
+      return res.status(400).json({ error: "Invalid discussion ID." });
     }
-}
 
-// GET /api/discussions/:id/replies
-async function getReplies(req, res) {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
-            SELECT r.*, CONCAT(u.first_name, ' ', u.last_name) AS author_name, u.role AS author_role, u.avatar_url
-            FROM discussion_replies r
-            JOIN users u ON r.user_id = u.user_id
-            WHERE r.discussion_id = $1
-            ORDER BY r.created_at ASC
-        `, [id]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch replies" });
+    const discCheck = await pool.query("SELECT course_id FROM discussions WHERE id = $1", [discussionId]);
+    if (discCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Discussion thread not found." });
     }
-}
 
-// POST /api/discussions/:id/replies
-async function postReply(req, res) {
-    try {
-        const { id } = req.params;
-        const { content } = req.body;
-        if (!content) return res.status(400).json({ error: "content is required" });
-
-        const discussion = await pool.query("SELECT course_id FROM discussions WHERE discussion_id = $1", [id]);
-        if (discussion.rows.length === 0) return res.status(404).json({ error: "Discussion not found" });
-
-        const allowed = await canAccessCourse(discussion.rows[0].course_id, req.user.id);
-        if (!allowed) return res.status(403).json({ error: "You must be enrolled in this course to reply" });
-
-        const result = await pool.query(
-            "INSERT INTO discussion_replies (discussion_id, user_id, content) VALUES ($1, $2, $3) RETURNING *",
-            [id, req.user.id, content]
-        );
-        res.status(201).json({ message: "Reply posted", reply: result.rows[0] });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to post reply" });
+    const courseId = discCheck.rows[0].course_id;
+    const hasAccess = await checkCourseAccess(userId, courseId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You must be enrolled in this course to view replies." });
     }
-}
 
-module.exports = { getDiscussionsForCourse, createDiscussion, getReplies, postReply };
+    const query = `
+      SELECT 
+        r.id,
+        r.discussion_id,
+        r.content,
+        r.created_at,
+        u.id AS author_id,
+        u.first_name || ' ' || u.last_name AS author_name,
+        u.role AS author_role
+      FROM discussion_replies r
+      JOIN users u ON r.user_id = u.id
+      WHERE r.discussion_id = $1
+      ORDER BY r.created_at ASC
+    `;
+
+    const result = await pool.query(query, [discussionId]);
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Post a reply
+exports.createReply = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const discussionId = parseInt(req.params.id, 10);
+    const { content } = req.body;
+
+    if (isNaN(discussionId) || !content || !content.trim()) {
+      return res.status(400).json({ error: "Discussion ID and reply content are required." });
+    }
+
+    const discCheck = await pool.query(
+      `SELECT d.course_id, d.user_id AS op_id, d.title 
+       FROM discussions d WHERE d.id = $1`,
+      [discussionId]
+    );
+
+    if (discCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Discussion not found." });
+    }
+
+    const { course_id, op_id, title } = discCheck.rows[0];
+
+    const hasAccess = await checkCourseAccess(userId, course_id);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You must be enrolled in this course to reply." });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO discussion_replies (discussion_id, user_id, content)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [discussionId, userId, content.trim()]
+    );
+
+    // Notify OP if respondent is someone else
+    if (op_id !== userId) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, title, message, type)
+         VALUES ($1, $2, $3, 'discussion')`,
+        [op_id, 'New Reply to Your Discussion', `Someone replied to your discussion "${title}".`]
+      );
+    }
+
+    return res.status(201).json({
+      message: "Reply posted successfully",
+      reply: insertResult.rows[0]
+    });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -1,39 +1,35 @@
 const jwt = require("jsonwebtoken");
-const pool = require("../config/db");
-require("dotenv").config();
 
-// Protects routes - checks for a valid JWT in the Authorization header
-function verifyToken(req, res, next) {
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1]; // "Bearer <token>"
+const authMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
 
-    if (!token) {
-        return res.status(401).json({ error: "No token provided" });
-    }
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Access denied. No authentication token provided." });
+  }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-        if (err) {
-            return res.status(403).json({ error: "Invalid or expired token" });
-        }
-        req.user = decoded; // { id, role, email }
+  const token = authHeader.split(" ")[1];
 
-        // Fire-and-forget: bump last_active_at so "Active Now" stays accurate.
-        // Not awaited on purpose - shouldn't slow down the actual request.
-        pool.query("UPDATE users SET last_active_at = NOW() WHERE user_id = $1", [req.user.id])
-            .catch(err => console.error("Failed to update last_active_at:", err.message));
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "learnova_super_secret_jwt_key_2026");
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid, expired, or malformed authentication token." });
+  }
+};
 
-        next();
-    });
-}
+const teacherOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "teacher") {
+    return res.status(403).json({ error: "Access forbidden. Teacher privileges required." });
+  }
+  next();
+};
 
-// Restricts a route to specific roles, e.g. verifyRole("teacher")
-function verifyRole(...allowedRoles) {
-    return (req, res, next) => {
-        if (!req.user || !allowedRoles.includes(req.user.role)) {
-            return res.status(403).json({ error: "Access denied for your role" });
-        }
-        next();
-    };
-}
+const studentOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "student") {
+    return res.status(403).json({ error: "Access forbidden. Student privileges required." });
+  }
+  next();
+};
 
-module.exports = { verifyToken, verifyRole };
+module.exports = { authMiddleware, teacherOnly, studentOnly };

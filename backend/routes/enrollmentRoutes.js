@@ -1,10 +1,6 @@
-const express = require("express");
-const router = express.Router();
-const { verifyToken, verifyRole } = require("../middleware/authMiddleware");
-const { enrollInCourse, getEnrollmentsForCourse, unenroll } = require("../controllers/enrollmentController");
-
-router.post("/", verifyToken, verifyRole("student"), enrollInCourse);
-router.delete("/:id", verifyToken, verifyRole("student"), unenroll);
-router.get("/course/:courseId", verifyToken, verifyRole("teacher"), getEnrollmentsForCourse);
-
+const router = require("express").Router();
+const enrollmentController = require("../controllers/enrollmentController");
+const { authMiddleware, studentOnly } = require("../middleware/authMiddleware");
+router.post("/", authMiddleware, studentOnly, enrollmentController.enroll);
+router.delete("/:id", authMiddleware, studentOnly, enrollmentController.unenroll);
 module.exports = router;

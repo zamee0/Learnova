@@ -1,40 +1,58 @@
 const pool = require("../config/db");
 
-// GET /api/dashboard/stats
-async function getStats(req, res) {
-    try {
-        const { id, role } = req.user;
+exports.getStats = async (req, res, next) => {
+  try {
+    const user = req.user;
 
-        if (role === "student") {
-            const [courses, discussions, notifs] = await Promise.all([
-                pool.query("SELECT COUNT(*) FROM enrollments WHERE student_id = $1", [id]),
-                pool.query(`SELECT COUNT(*) FROM discussions WHERE course_id IN
-                            (SELECT course_id FROM enrollments WHERE student_id = $1)`, [id]),
-                pool.query("SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = FALSE", [id])
-            ]);
-            return res.json({
-                enrolled_courses: parseInt(courses.rows[0].count, 10),
-                active_discussions: parseInt(discussions.rows[0].count, 10),
-                unread_notifications: parseInt(notifs.rows[0].count, 10)
-            });
-        }
+    if (user.role === "teacher") {
+      const courseCount = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM courses WHERE teacher_id = $1",
+        [user.id]
+      );
 
-        // teacher
-        const [courses, discussions, notifs] = await Promise.all([
-            pool.query("SELECT COUNT(*) FROM courses WHERE teacher_id = $1", [id]),
-            pool.query(`SELECT COUNT(*) FROM discussions WHERE course_id IN
-                        (SELECT course_id FROM courses WHERE teacher_id = $1)`, [id]),
-            pool.query("SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = FALSE", [id])
-        ]);
-        res.json({
-            teaching_courses: parseInt(courses.rows[0].count, 10),
-            active_discussions: parseInt(discussions.rows[0].count, 10),
-            unread_notifications: parseInt(notifs.rows[0].count, 10)
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch dashboard stats" });
+      const discussionCount = await pool.query(
+        `SELECT COUNT(d.id)::int AS count 
+         FROM discussions d 
+         JOIN courses c ON d.course_id = c.id 
+         WHERE c.teacher_id = $1`,
+        [user.id]
+      );
+
+      const unreadNotif = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
+        [user.id]
+      );
+
+      return res.status(200).json({
+        totalCourses: courseCount.rows[0].count,
+        totalDiscussions: discussionCount.rows[0].count,
+        unreadNotifications: unreadNotif.rows[0].count
+      });
+    } else {
+      const enrollmentCount = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM enrollments WHERE user_id = $1",
+        [user.id]
+      );
+
+      const activeDiscussions = await pool.query(
+        `SELECT COUNT(d.id)::int AS count 
+         FROM discussions d 
+         WHERE d.course_id IN (SELECT course_id FROM enrollments WHERE user_id = $1)`,
+        [user.id]
+      );
+
+      const unreadNotif = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
+        [user.id]
+      );
+
+      return res.status(200).json({
+        enrolledCourses: enrollmentCount.rows[0].count,
+        activeDiscussions: activeDiscussions.rows[0].count,
+        unreadNotifications: unreadNotif.rows[0].count
+      });
     }
-}
-
-module.exports = { getStats };
+  } catch (err) {
+    next(err);
+  }
+};

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Learnova</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a>
+      </div>
+      <ul class="sidebar-nav" id="sidebarNav"></ul>
+      <div class="sidebar-footer">
+        <button class="btn btn-outline" style="width:100%;" onclick="logout()">
+          <i class="fa-solid fa-right-from-bracket"></i> Logout
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('active')"><i class="fa-solid fa-bars"></i></button>
+          <h1 class="topbar-title">Dashboard Overview</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="user-profile-badge">
+            <div class="avatar current-user-avatar"></div>
+            <div class="user-info-text">
+              <span class="user-name current-user-name"></span>
+              <span class="user-role-badge current-user-role"></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-body">
+        <section class="stats-grid" id="statsContainer">
+          <div class="stat-card"><div class="spinner"></div></div>
+        </section>
+
+        <section style="margin-top:2rem;">
+          <h2 style="font-size:1.25rem; font-weight:600; margin-bottom:1rem;">Recent Announcements</h2>
+          <div id="announcementsContainer"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

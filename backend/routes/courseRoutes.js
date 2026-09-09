@@ -1,13 +1,23 @@
-const express = require("express");
-const router = express.Router();
-const { verifyToken, verifyRole } = require("../middleware/authMiddleware");
-const { getAllCourses, getCourseById, getMyCourses, getTeachingCourses, createCourse } = require("../controllers/courseController");
+const router = require("express").Router();
+const courseController = require("../controllers/courseController");
+const { authMiddleware, teacherOnly } = require("../middleware/authMiddleware");
 
-router.get("/", getAllCourses);
-router.get("/my", verifyToken, verifyRole("student"), getMyCourses);
-router.get("/my-courses", verifyToken, verifyRole("student"), getMyCourses); // alias
-router.get("/teaching", verifyToken, verifyRole("teacher"), getTeachingCourses);
-router.get("/:id", getCourseById);
-router.post("/", verifyToken, verifyRole("teacher"), createCourse);
-
+router.get("/", (req, res, next) => {
+  // Optional auth extraction to identify student enrollment status
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith("Bearer ")) {
+    return authMiddleware(req, res, () => courseController.getAllCourses(req, res, next));
+  }
+  return courseController.getAllCourses(req, res, next);
+});
+router.get("/my-courses", authMiddleware, courseController.getMyCourses);
+router.get("/teaching", authMiddleware, teacherOnly, courseController.getTeachingCourses);
+router.get("/:id", (req, res, next) => {
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith("Bearer ")) {
+    return authMiddleware(req, res, () => courseController.getCourseById(req, res, next));
+  }
+  return courseController.getCourseById(req, res, next);
+});
+router.post("/", authMiddleware, teacherOnly, courseController.createCourse);
 module.exports = router;

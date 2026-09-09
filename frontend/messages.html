@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messages — Learnova</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a>
+      </div>
+      <ul class="sidebar-nav" id="sidebarNav"></ul>
+      <div class="sidebar-footer">
+        <button class="btn btn-outline" style="width:100%;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </aside>
+
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('active')"><i class="fa-solid fa-bars"></i></button>
+          <h1 class="topbar-title">Direct Messages</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="user-profile-badge">
+            <div class="avatar current-user-avatar"></div>
+            <div class="user-info-text">
+              <span class="user-name current-user-name"></span>
+              <span class="user-role-badge current-user-role"></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-body">
+        <div class="chat-layout">
+          <div class="chat-sidebar" id="conversationList"></div>
+          <div class="chat-main">
+            <div style="padding:1rem; border-bottom:1px solid var(--border); font-weight:600;" id="activeChatUser">Select a Conversation</div>
+            <div class="chat-messages" id="chatMessages">
+              <p style="text-align:center; color:var(--gray-500); margin-top:2rem;">Select a learner from the left to start chatting</p>
+            </div>
+            <form class="chat-input-area" id="sendMessageForm">
+              <input type="text" id="messageInput" class="form-control" placeholder="Type a message..." required>
+              <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/messages.js"></script>
+</body>
+</html>

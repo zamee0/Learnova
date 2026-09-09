@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Management — Learnova</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a>
+      </div>
+      <ul class="sidebar-nav" id="sidebarNav"></ul>
+      <div class="sidebar-footer">
+        <button class="btn btn-outline" style="width:100%;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </aside>
+
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('active')"><i class="fa-solid fa-bars"></i></button>
+          <h1 class="topbar-title">Create & Manage Courses</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="user-profile-badge">
+            <div class="avatar current-user-avatar"></div>
+            <div class="user-info-text">
+              <span class="user-name current-user-name"></span>
+              <span class="user-role-badge current-user-role"></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-body" style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
+        <div class="card">
+          <h2 style="font-size:1.25rem; font-weight:600; margin-bottom:1.25rem;"><i class="fa-solid fa-plus-circle"></i> Create New Course</h2>
+          <form id="createCourseForm">
+            <div class="form-group">
+              <label class="form-label" for="title">Course Title</label>
+              <input type="text" id="title" class="form-control" placeholder="e.g. Full-Stack Web Development" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="category">Category</label>
+              <select id="category" class="form-select" required>
+                <option value="Computer Science">Computer Science</option>
+                <option value="Design">Design</option>
+                <option value="Business">Business</option>
+                <option value="Mathematics">Mathematics</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="level">Level</label>
+              <select id="level" class="form-select" required>
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="thumbnail_url">Thumbnail Image URL</label>
+              <input type="url" id="thumbnail_url" class="form-control" placeholder="https://example.com/image.jpg">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="description">Course Description</label>
+              <textarea id="description" class="form-control" rows="4" placeholder="Explain the syllabus and key outcomes..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Publish Course</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2 style="font-size:1.25rem; font-weight:600; margin-bottom:1.25rem;"><i class="fa-solid fa-bullhorn"></i> Post Course Announcement</h2>
+          <form id="createAnnouncementForm">
+            <div class="form-group">
+              <label class="form-label" for="teacherCourseSelect">Select Target Course</label>
+              <select id="teacherCourseSelect" class="form-select" required></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="announcementTitle">Announcement Title</label>
+              <input type="text" id="announcementTitle" class="form-control" placeholder="e.g. Assignment 1 Released" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="announcementContent">Content</label>
+              <textarea id="announcementContent" class="form-control" rows="4" placeholder="Announcement details..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Broadcast Announcement</button>
+          </form>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/teacher.js"></script>
+</body>
+</html>

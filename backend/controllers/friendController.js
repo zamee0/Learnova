@@ -1,137 +1,114 @@
 const pool = require("../config/db");
 
-// Always store the pair with the smaller id first, so (A,B) and (B,A) are the same row
-function orderedPair(a, b) {
-    return a < b ? [a, b] : [b, a];
-}
+exports.getFriends = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const query = `
+      SELECT 
+        u.id, 
+        u.first_name || ' ' || u.last_name AS name, 
+        u.email, 
+        u.role, 
+        u.bio
+      FROM friendships f
+      JOIN users u ON (f.friend_id = u.id AND f.user_id = $1) OR (f.user_id = u.id AND f.friend_id = $1)
+      WHERE f.status = 'accepted'
+    `;
+    const result = await pool.query(query, [userId]);
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
 
-// POST /api/friends/request - send a friend request
-async function sendFriendRequest(req, res) {
-    const client = await pool.connect();
-    try {
-        const { receiver_id } = req.body;
-        const sender_id = req.user.id;
-        if (!receiver_id) return res.status(400).json({ error: "receiver_id is required" });
-        if (receiver_id === sender_id) return res.status(400).json({ error: "Can't friend yourself" });
+exports.getRequests = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const query = `
+      SELECT 
+        f.id,
+        f.user_id AS sender_id,
+        u.first_name || ' ' || u.last_name AS sender_name,
+        u.email AS sender_email,
+        f.created_at
+      FROM friendships f
+      JOIN users u ON f.user_id = u.id
+      WHERE f.friend_id = $1 AND f.status = 'pending'
+      ORDER BY f.created_at DESC
+    `;
+    const result = await pool.query(query, [userId]);
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
 
-        const [a, b] = orderedPair(sender_id, receiver_id);
-        const existingFriendship = await client.query(
-            "SELECT 1 FROM friendships WHERE user_a_id = $1 AND user_b_id = $2", [a, b]
-        );
-        if (existingFriendship.rows.length > 0) {
-            return res.status(409).json({ error: "Already friends" });
-        }
+exports.sendRequest = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const target = req.body.receiver_id || req.body.email;
 
-        await client.query("BEGIN");
-        const result = await client.query(
-            "INSERT INTO friend_requests (sender_id, receiver_id) VALUES ($1, $2) RETURNING *",
-            [sender_id, receiver_id]
-        );
-
-        const sender = await client.query("SELECT first_name, last_name FROM users WHERE user_id = $1", [sender_id]);
-        await client.query(
-            `INSERT INTO notifications (user_id, title, message, type)
-             VALUES ($1, $2, $3, 'friend_request')`,
-            [receiver_id, "New friend request", `${sender.rows[0].first_name} ${sender.rows[0].last_name} sent you a friend request.`]
-        );
-
-        await client.query("COMMIT");
-        res.status(201).json({ message: "Friend request sent", request: result.rows[0] });
-    } catch (err) {
-        await client.query("ROLLBACK");
-        if (err.code === "23505") {
-            return res.status(409).json({ error: "Friend request already sent" });
-        }
-        console.error(err);
-        res.status(500).json({ error: "Failed to send friend request" });
-    } finally {
-        client.release();
+    if (!target) {
+      return res.status(400).json({ error: "Receiver ID or Email is required." });
     }
-}
 
-// PUT /api/friends/request/:id - accept or reject
-async function respondToFriendRequest(req, res) {
-    const client = await pool.connect();
-    try {
-        const { id } = req.params;
-        const { action } = req.body; // "accept" | "reject"
-        if (!["accept", "reject"].includes(action)) {
-            return res.status(400).json({ error: "action must be 'accept' or 'reject'" });
-        }
-
-        const reqResult = await client.query("SELECT * FROM friend_requests WHERE request_id = $1", [id]);
-        if (reqResult.rows.length === 0) return res.status(404).json({ error: "Request not found" });
-        const request = reqResult.rows[0];
-
-        if (request.receiver_id !== req.user.id) {
-            return res.status(403).json({ error: "This request isn't addressed to you" });
-        }
-        if (request.status !== "pending") {
-            return res.status(409).json({ error: `Request already ${request.status}` });
-        }
-
-        await client.query("BEGIN");
-        const newStatus = action === "accept" ? "accepted" : "rejected";
-        await client.query("UPDATE friend_requests SET status = $1 WHERE request_id = $2", [newStatus, id]);
-
-        if (action === "accept") {
-            const [a, b] = orderedPair(request.sender_id, request.receiver_id);
-            await client.query(
-                "INSERT INTO friendships (user_a_id, user_b_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                [a, b]
-            );
-
-            const receiver = await client.query("SELECT first_name, last_name FROM users WHERE user_id = $1", [req.user.id]);
-            await client.query(
-                `INSERT INTO notifications (user_id, title, message, type)
-                 VALUES ($1, $2, $3, 'friend_accept')`,
-                [request.sender_id, "Friend request accepted", `${receiver.rows[0].first_name} ${receiver.rows[0].last_name} accepted your friend request.`]
-            );
-        }
-
-        await client.query("COMMIT");
-        res.json({ message: `Request ${newStatus}` });
-    } catch (err) {
-        await client.query("ROLLBACK");
-        console.error(err);
-        res.status(500).json({ error: "Failed to respond to friend request" });
-    } finally {
-        client.release();
+    let friendId;
+    if (isNaN(target)) {
+      const userLookup = await pool.query("SELECT id FROM users WHERE email = $1", [target.toLowerCase().trim()]);
+      if (userLookup.rows.length === 0) return res.status(404).json({ error: "User not found with this email." });
+      friendId = userLookup.rows[0].id;
+    } else {
+      friendId = parseInt(target, 10);
     }
-}
 
-// GET /api/friends/requests - incoming pending requests
-async function getIncomingRequests(req, res) {
-    try {
-        const result = await pool.query(`
-            SELECT fr.request_id, fr.created_at, u.user_id, u.first_name, u.last_name, u.avatar_url, u.role
-            FROM friend_requests fr
-            JOIN users u ON fr.sender_id = u.user_id
-            WHERE fr.receiver_id = $1 AND fr.status = 'pending'
-            ORDER BY fr.created_at DESC
-        `, [req.user.id]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch friend requests" });
+    if (userId === friendId) {
+      return res.status(400).json({ error: "You cannot add yourself as a friend." });
     }
-}
 
-// GET /api/friends - my friend list (with Active Now status)
-async function getMyFriends(req, res) {
-    try {
-        const result = await pool.query(`
-            SELECT u.user_id, u.first_name, u.last_name, u.avatar_url, u.role,
-                   (u.last_active_at > NOW() - INTERVAL '5 minutes') AS is_active_now
-            FROM friendships f
-            JOIN users u ON u.user_id = CASE WHEN f.user_a_id = $1 THEN f.user_b_id ELSE f.user_a_id END
-            WHERE f.user_a_id = $1 OR f.user_b_id = $1
-        `, [req.user.id]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch friends" });
+    const existing = await pool.query(
+      `SELECT status FROM friendships 
+       WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
+      [userId, friendId]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: `A friendship or request already exists (${existing.rows[0].status}).` });
     }
-}
 
-module.exports = { sendFriendRequest, respondToFriendRequest, getIncomingRequests, getMyFriends };
+    await pool.query(
+      `INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending')`,
+      [userId, friendId]
+    );
+
+    return res.status(201).json({ message: "Friend request sent successfully." });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.respondRequest = async (req, res, next) => {
+  try {
+    const requestId = parseInt(req.params.id, 10);
+    const { status } = req.body;
+
+    if (!['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: "Status must be 'accepted' or 'rejected'." });
+    }
+
+    const result = await pool.query(
+      `UPDATE friendships 
+       SET status = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $2 AND friend_id = $3
+       RETURNING *`,
+      [status, requestId, req.user.id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Friend request not found or unauthorized." });
+    }
+
+    return res.status(200).json({ message: `Request ${status} successfully.` });
+  } catch (err) {
+    next(err);
+  }
+};

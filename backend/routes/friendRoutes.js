@@ -1,11 +1,8 @@
-const express = require("express");
-const router = express.Router();
-const { verifyToken } = require("../middleware/authMiddleware");
-const { sendFriendRequest, respondToFriendRequest, getIncomingRequests, getMyFriends } = require("../controllers/friendController");
-
-router.post("/request", verifyToken, sendFriendRequest);
-router.put("/request/:id", verifyToken, respondToFriendRequest);
-router.get("/requests", verifyToken, getIncomingRequests);
-router.get("/", verifyToken, getMyFriends);
-
+const router = require("express").Router();
+const friendController = require("../controllers/friendController");
+const { authMiddleware } = require("../middleware/authMiddleware");
+router.get("/", authMiddleware, friendController.getFriends);
+router.get("/requests", authMiddleware, friendController.getRequests);
+router.post("/request", authMiddleware, friendController.sendRequest);
+router.put("/request/:id", authMiddleware, friendController.respondRequest);
 module.exports = router;

@@ -1,106 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Learnova — Next-Gen E-Learning Platform</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/auth.css">
 </head>
 <body>
-
-
-<section>
-    <h2>1. Signup / Login</h2>
-    <div class="row">
-        <input id="su_first" placeholder="First name">
-        <input id="su_last" placeholder="Last name">
+  <nav class="landing-nav">
+    <div class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</div>
+    <div style="display:flex; gap:1rem;">
+      <a href="/login.html" class="btn btn-outline">Log In</a>
+      <a href="/signup.html" class="btn btn-primary">Sign Up</a>
     </div>
-    <input id="su_email" placeholder="Email">
-    <input id="su_password" type="password" placeholder="Password">
-    <select id="su_role">
-        <option value="student">student</option>
-        <option value="teacher">teacher</option>
-    </select>
-    <button onclick="signup()">Sign up</button>
-    <button onclick="login()">Login</button>
-    <p id="tokenBox">Not logged in</p>
-</section>
+  </nav>
 
-<section>
-    <h2>2. Browse Courses</h2>
-    <button onclick="loadCourses()">Load all courses</button>
-    <div id="courseList"></div>
-</section>
+  <main class="hero">
+    <h1>Transform Your Learning Journey With Learnova</h1>
+    <p>Discover interactive courses taught by real industry mentors, participate in rich Q&A discussions, and collaborate with fellow learners.</p>
+    <div style="display:flex; justify-content:center; gap:1rem;">
+      <a href="/courses.html" class="btn btn-primary btn-lg" style="padding:0.9rem 1.8rem; font-size:1.05rem;">
+        <i class="fa-solid fa-book-open"></i> Browse Courses
+      </a>
+      <a href="/signup.html" class="btn btn-outline btn-lg" style="padding:0.9rem 1.8rem; font-size:1.05rem;">
+        Get Started Free
+      </a>
+    </div>
+  </main>
 
-<section>
-    <h2>3. My Profile</h2>
-    <button onclick="loadProfile()">Load my profile</button>
-    <div id="profileBox"></div>
-</section>
-
-
-<script>
-const API = "/api";
-let token = localStorage.getItem("token") || "";
-document.getElementById("tokenBox").textContent = token ? "Logged in, token stored." : "Not logged in";
-
-function log(data) {
-    document.getElementById("log").textContent = JSON.stringify(data, null, 2);
-}
-
-async function call(endpoint, method = "GET", body = null, auth = false) {
-    const headers = { "Content-Type": "application/json" };
-    if (auth && token) headers["Authorization"] = "Bearer " + token;
-    const res = await fetch(API + endpoint, { method, headers, body: body ? JSON.stringify(body) : null });
-    const data = await res.json();
-    log(data);
-    return data;
-}
-
-async function signup() {
-    const data = await call("/auth/signup", "POST", {
-        first_name: document.getElementById("su_first").value,
-        last_name: document.getElementById("su_last").value,
-        email: document.getElementById("su_email").value,
-        password: document.getElementById("su_password").value,
-        role: document.getElementById("su_role").value
-    });
-    if (data.token) {
-        token = data.token;
-        localStorage.setItem("token", token);
-        document.getElementById("tokenBox").textContent = "Logged in as " + data.user.email;
-    }
-}
-
-async function login() {
-    const data = await call("/auth/login", "POST", {
-        email: document.getElementById("su_email").value,
-        password: document.getElementById("su_password").value
-    });
-    if (data.token) {
-        token = data.token;
-        localStorage.setItem("token", token);
-        document.getElementById("tokenBox").textContent = "Logged in as " + data.user.email;
-    }
-}
-
-async function loadCourses() {
-    const data = await call("/courses");
-    const list = document.getElementById("courseList");
-    list.innerHTML = "";
-    if (Array.isArray(data)) {
-        data.forEach(c => {
-            const div = document.createElement("div");
-            div.style.padding = "6px 0";
-            div.style.borderTop = "1px solid #eee";
-            div.textContent = `${c.title} — ${c.teacher_name} — ${c.category} — ${c.enrolled_count} enrolled`;
-            list.appendChild(div);
-        });
-    }
-}
-
-async function loadProfile() {
-    const data = await call("/users/me", "GET", null, true);
-    document.getElementById("profileBox").textContent = JSON.stringify(data, null, 2);
-}
-</script>
+  <section class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon"><i class="fa-solid fa-chalkboard"></i></div>
+      <h3 style="font-weight:600; margin-bottom:0.5rem;">Interactive Courses</h3>
+      <p style="color:var(--gray-500); font-size:0.9rem;">High quality courses across development, engineering, design, and business.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i class="fa-solid fa-comments"></i></div>
+      <h3 style="font-weight:600; margin-bottom:0.5rem;">Discussions & Q&A</h3>
+      <p style="color:var(--gray-500); font-size:0.9rem;">Ask questions on course topics and get verified answers directly from instructors.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i class="fa-solid fa-users"></i></div>
+      <h3 style="font-weight:600; margin-bottom:0.5rem;">Learner Network</h3>
+      <p style="color:var(--gray-500); font-size:0.9rem;">Connect with friends, build study groups, and message your peers seamlessly.</p>
+    </div>
+  </section>
 </body>
 </html>
