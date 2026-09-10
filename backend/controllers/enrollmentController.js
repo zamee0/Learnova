@@ -3,7 +3,7 @@ const pool = require("../config/db");
 // Enroll a student in a course
 exports.enroll = async (req, res, next) => {
   try {
-    const studentId = req.user.id;
+    const studentId = req.user.user_id || req.user.id;
     const courseId = parseInt(req.body.course_id, 10);
 
     if (isNaN(courseId)) {
@@ -12,10 +12,10 @@ exports.enroll = async (req, res, next) => {
 
     // Verify course exists
     const courseCheck = await pool.query(
-      `SELECT c.id, c.title, c.teacher_id, u.first_name || ' ' || u.last_name AS student_name
+      `SELECT c.course_id, c.title, c.teacher_id, u.first_name || ' ' || u.last_name AS student_name
        FROM courses c
        CROSS JOIN users u
-       WHERE c.id = $1 AND u.id = $2`,
+       WHERE c.course_id = $1 AND u.user_id = $2`,
       [courseId, studentId]
     );
 
@@ -23,11 +23,11 @@ exports.enroll = async (req, res, next) => {
       return res.status(404).json({ error: "Course not found." });
     }
 
-    const courseInfo = courseCheck.rows[0];
+    const { title, teacher_id, student_name } = courseCheck.rows[0];
 
     // Prevent duplicate enrollment
     const existing = await pool.query(
-      "SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2",
+      "SELECT enrollment_id FROM enrollments WHERE student_id = $1 AND course_id = $2",
       [studentId, courseId]
     );
 
@@ -35,30 +35,29 @@ exports.enroll = async (req, res, next) => {
       return res.status(400).json({ error: "You are already enrolled in this course." });
     }
 
-    // Insert enrollment
     const result = await pool.query(
-      `INSERT INTO enrollments (user_id, course_id)
+      `INSERT INTO enrollments (student_id, course_id)
        VALUES ($1, $2)
-       RETURNING *`,
+       RETURNING *, enrollment_id AS id`,
       [studentId, courseId]
     );
 
     // Notify student
     await pool.query(
       `INSERT INTO notifications (user_id, title, message, type)
-       VALUES ($1, $2, $3, 'enrollment')`,
-      [studentId, 'Enrolled Successfully', `You have successfully enrolled in "${courseInfo.title}".`]
+       VALUES ($1, 'Course Enrolled Successfully', $2, 'enrollment')`,
+      [studentId, `You are now enrolled in "${title}".`]
     );
 
-    // Notify instructor
+    // Notify teacher
     await pool.query(
       `INSERT INTO notifications (user_id, title, message, type)
-       VALUES ($1, $2, $3, 'enrollment')`,
-      [courseInfo.teacher_id, 'New Student Enrollment', `${courseInfo.student_name} enrolled in your course "${courseInfo.title}".`]
+       VALUES ($1, 'New Student Enrolled', $2, 'enrollment')`,
+      [teacher_id, `${student_name} enrolled in "${title}".`]
     );
 
     return res.status(201).json({
-      message: "Successfully enrolled in the course",
+      message: "Successfully enrolled in course",
       enrollment: result.rows[0]
     });
   } catch (err) {
@@ -66,30 +65,28 @@ exports.enroll = async (req, res, next) => {
   }
 };
 
-// Unenroll student from a course
+// Unenroll a student from a course
 exports.unenroll = async (req, res, next) => {
   try {
-    const studentId = req.user.id;
-    const enrollmentIdOrCourseId = parseInt(req.params.id, 10);
+    const studentId = req.user.user_id || req.user.id;
+    const targetId = parseInt(req.params.id, 10);
 
-    if (isNaN(enrollmentIdOrCourseId)) {
-      return res.status(400).json({ error: "Invalid ID supplied." });
+    if (isNaN(targetId)) {
+      return res.status(400).json({ error: "Invalid ID provided." });
     }
 
-    const deleteResult = await pool.query(
+    const result = await pool.query(
       `DELETE FROM enrollments 
-       WHERE user_id = $1 AND (id = $2 OR course_id = $2)
-       RETURNING id, course_id`,
-      [studentId, enrollmentIdOrCourseId]
+       WHERE student_id = $1 AND (enrollment_id = $2 OR course_id = $2)
+       RETURNING enrollment_id`,
+      [studentId, targetId]
     );
 
-    if (deleteResult.rowCount === 0) {
-      return res.status(404).json({ error: "Active enrollment record not found." });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Enrollment record not found." });
     }
 
-    return res.status(200).json({
-      message: "Successfully unenrolled from the course."
-    });
+    return res.status(200).json({ message: "Successfully unenrolled from course." });
   } catch (err) {
     next(err);
   }

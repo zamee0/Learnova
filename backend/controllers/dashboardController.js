@@ -2,25 +2,26 @@ const pool = require("../config/db");
 
 exports.getStats = async (req, res, next) => {
   try {
-    const user = req.user;
+    const userId = req.user.user_id || req.user.id;
+    const role = req.user.role;
 
-    if (user.role === "teacher") {
+    if (role === "teacher") {
       const courseCount = await pool.query(
         "SELECT COUNT(*)::int AS count FROM courses WHERE teacher_id = $1",
-        [user.id]
+        [userId]
       );
 
       const discussionCount = await pool.query(
-        `SELECT COUNT(d.id)::int AS count 
+        `SELECT COUNT(d.discussion_id)::int AS count 
          FROM discussions d 
-         JOIN courses c ON d.course_id = c.id 
+         JOIN courses c ON d.course_id = c.course_id 
          WHERE c.teacher_id = $1`,
-        [user.id]
+        [userId]
       );
 
       const unreadNotif = await pool.query(
         "SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
-        [user.id]
+        [userId]
       );
 
       return res.status(200).json({
@@ -30,20 +31,20 @@ exports.getStats = async (req, res, next) => {
       });
     } else {
       const enrollmentCount = await pool.query(
-        "SELECT COUNT(*)::int AS count FROM enrollments WHERE user_id = $1",
-        [user.id]
+        "SELECT COUNT(*)::int AS count FROM enrollments WHERE student_id = $1",
+        [userId]
       );
 
       const activeDiscussions = await pool.query(
-        `SELECT COUNT(d.id)::int AS count 
+        `SELECT COUNT(d.discussion_id)::int AS count 
          FROM discussions d 
-         WHERE d.course_id IN (SELECT course_id FROM enrollments WHERE user_id = $1)`,
-        [user.id]
+         WHERE d.course_id IN (SELECT course_id FROM enrollments WHERE student_id = $1)`,
+        [userId]
       );
 
       const unreadNotif = await pool.query(
         "SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
-        [user.id]
+        [userId]
       );
 
       return res.status(200).json({

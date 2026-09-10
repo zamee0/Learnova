@@ -2,7 +2,8 @@ const pool = require("../config/db");
 
 exports.getConversations = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.user_id || req.user.id;
+
     const query = `
       SELECT DISTINCT ON (other_user_id)
         other_user_id,
@@ -16,13 +17,14 @@ exports.getConversations = async (req, res, next) => {
           content,
           m.created_at
         FROM messages m
-        JOIN users su ON m.sender_id = su.id
-        JOIN users ru ON m.receiver_id = ru.id
+        JOIN users su ON m.sender_id = su.user_id
+        JOIN users ru ON m.receiver_id = ru.user_id
         WHERE sender_id = $1 OR receiver_id = $1
         ORDER BY m.created_at DESC
       ) t
       ORDER BY other_user_id, created_at DESC
     `;
+
     const result = await pool.query(query, [userId]);
     return res.status(200).json(result.rows);
   } catch (err) {
@@ -32,12 +34,13 @@ exports.getConversations = async (req, res, next) => {
 
 exports.getMessagesWithUser = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.user_id || req.user.id;
     const otherUserId = parseInt(req.params.otherUserId, 10);
 
     const query = `
       SELECT 
-        m.id,
+        m.message_id,
+        m.message_id AS id,
         m.sender_id,
         m.receiver_id,
         m.content,
@@ -45,7 +48,7 @@ exports.getMessagesWithUser = async (req, res, next) => {
         m.created_at,
         su.first_name || ' ' || su.last_name AS sender_name
       FROM messages m
-      JOIN users su ON m.sender_id = su.id
+      JOIN users su ON m.sender_id = su.user_id
       WHERE (m.sender_id = $1 AND m.receiver_id = $2)
          OR (m.sender_id = $2 AND m.receiver_id = $1)
       ORDER BY m.created_at ASC
@@ -60,7 +63,7 @@ exports.getMessagesWithUser = async (req, res, next) => {
 
 exports.sendMessage = async (req, res, next) => {
   try {
-    const senderId = req.user.id;
+    const senderId = req.user.user_id || req.user.id;
     const { receiver_id, content } = req.body;
     const receiverId = parseInt(receiver_id, 10);
 
@@ -71,7 +74,7 @@ exports.sendMessage = async (req, res, next) => {
     const result = await pool.query(
       `INSERT INTO messages (sender_id, receiver_id, content)
        VALUES ($1, $2, $3)
-       RETURNING *`,
+       RETURNING *, message_id AS id`,
       [senderId, receiverId, content.trim()]
     );
 

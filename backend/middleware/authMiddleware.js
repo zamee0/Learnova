@@ -2,32 +2,35 @@ const jwt = require("jsonwebtoken");
 
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
-
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Access denied. No authentication token provided." });
+    return res.status(401).json({ error: "Access denied. Authentication token missing." });
   }
 
   const token = authHeader.split(" ")[1];
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "learnova_super_secret_jwt_key_2026");
-    req.user = decoded;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "learnova_jwt_secret_2026");
+    // Normalize both user_id and id for convenience across controllers
+    req.user = {
+      ...decoded,
+      user_id: decoded.user_id || decoded.id,
+      id: decoded.user_id || decoded.id
+    };
     next();
   } catch (err) {
-    return res.status(401).json({ error: "Invalid, expired, or malformed authentication token." });
+    return res.status(401).json({ error: "Invalid or expired token. Please log in again." });
   }
 };
 
 const teacherOnly = (req, res, next) => {
   if (!req.user || req.user.role !== "teacher") {
-    return res.status(403).json({ error: "Access forbidden. Teacher privileges required." });
+    return res.status(403).json({ error: "Access forbidden. Teacher role required." });
   }
   next();
 };
 
 const studentOnly = (req, res, next) => {
   if (!req.user || req.user.role !== "student") {
-    return res.status(403).json({ error: "Access forbidden. Student privileges required." });
+    return res.status(403).json({ error: "Access forbidden. Student role required." });
   }
   next();
 };
