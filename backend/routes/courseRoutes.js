@@ -1,23 +1,22 @@
 const router = require("express").Router();
-const courseController = require("../controllers/courseController");
+const c = require("../controllers/courseController");
 const { authMiddleware, teacherOnly } = require("../middleware/authMiddleware");
 
-router.get("/", (req, res, next) => {
-  // Optional auth extraction to identify student enrollment status
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith("Bearer ")) {
-    return authMiddleware(req, res, () => courseController.getAllCourses(req, res, next));
-  }
-  return courseController.getAllCourses(req, res, next);
-});
-router.get("/my-courses", authMiddleware, courseController.getMyCourses);
-router.get("/teaching", authMiddleware, teacherOnly, courseController.getTeachingCourses);
-router.get("/:id", (req, res, next) => {
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith("Bearer ")) {
-    return authMiddleware(req, res, () => courseController.getCourseById(req, res, next));
-  }
-  return courseController.getCourseById(req, res, next);
-});
-router.post("/", authMiddleware, teacherOnly, courseController.createCourse);
+const optAuth = (req, res, next) => {
+  if (req.headers.authorization?.startsWith("Bearer ")) return authMiddleware(req, res, next);
+  next();
+};
+
+router.get("/", optAuth, c.getAllCourses);
+router.get("/my-courses", authMiddleware, c.getMyCourses);
+router.get("/teaching", authMiddleware, teacherOnly, c.getTeachingCourses);
+router.get("/:id", optAuth, c.getCourseById);
+router.post("/", authMiddleware, teacherOnly, c.createCourse);
+router.put("/:id", authMiddleware, c.updateCourse);
+router.delete("/:id/banner", authMiddleware, teacherOnly, c.deleteCourseBanner);
+router.get("/:id/students", authMiddleware, teacherOnly, c.getEnrolledStudents);
+router.post("/:id/students/:studentId/moderate", authMiddleware, teacherOnly, c.banOrRemoveStudent);
+router.post("/:id/reviews", authMiddleware, c.addReview);
+router.get("/:id/reviews", c.getReviews);
+router.post("/:id/complete", authMiddleware, c.completeCourse);
 module.exports = router;

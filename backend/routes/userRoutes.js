@@ -1,6 +1,9 @@
 const router = require("express").Router();
-const userController = require("../controllers/userController");
+const c = require("../controllers/userController");
 const { authMiddleware } = require("../middleware/authMiddleware");
-router.get("/me", authMiddleware, userController.getMe);
-router.put("/profile", authMiddleware, userController.updateProfile);
+router.get("/me", authMiddleware, c.getMe);
+router.put("/profile", authMiddleware, c.updateProfile);
+router.post("/heartbeat", authMiddleware, c.heartbeat);
+router.get("/search", authMiddleware, c.searchUser);
+router.get("/:id/activity", authMiddleware, c.getUserActivity);
 module.exports = router;

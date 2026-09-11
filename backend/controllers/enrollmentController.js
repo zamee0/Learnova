@@ -1,21 +1,33 @@
 const pool = require("../config/db");
 
-// Enroll a student in a course
 exports.enroll = async (req, res, next) => {
   try {
-    const studentId = req.user.user_id || req.user.id;
+    const studentId = req.user.id;
     const courseId = parseInt(req.body.course_id, 10);
 
     if (isNaN(courseId)) {
       return res.status(400).json({ error: "Valid course_id is required." });
     }
 
-    // Verify course exists
+    if (req.user.role !== "student") {
+      return res.status(403).json({ error: "Only student accounts can enroll in courses." });
+    }
+
+    // Check if student is banned from this course
+    const banCheck = await pool.query(
+      "SELECT 1 FROM course_bans WHERE user_id = $1 AND course_id = $2",
+      [studentId, courseId]
+    );
+    if (banCheck.rows.length > 0) {
+      return res.status(403).json({ error: "You are banned from enrolling in this course by the instructor." });
+    }
+
+    // Check course existence
     const courseCheck = await pool.query(
-      `SELECT c.course_id, c.title, c.teacher_id, u.first_name || ' ' || u.last_name AS student_name
+      `SELECT c.id, c.title, c.teacher_id, u.first_name || ' ' || u.last_name AS student_name
        FROM courses c
        CROSS JOIN users u
-       WHERE c.course_id = $1 AND u.user_id = $2`,
+       WHERE c.id = $1 AND u.id = $2`,
       [courseId, studentId]
     );
 
@@ -25,65 +37,65 @@ exports.enroll = async (req, res, next) => {
 
     const { title, teacher_id, student_name } = courseCheck.rows[0];
 
-    // Prevent duplicate enrollment
+    // Check existing enrollment
     const existing = await pool.query(
-      "SELECT enrollment_id FROM enrollments WHERE student_id = $1 AND course_id = $2",
+      "SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2",
       [studentId, courseId]
     );
-
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: "You are already enrolled in this course." });
     }
 
     const result = await pool.query(
-      `INSERT INTO enrollments (student_id, course_id)
-       VALUES ($1, $2)
-       RETURNING *, enrollment_id AS id`,
+      `INSERT INTO enrollments (user_id, course_id, status, progress_percent) 
+       VALUES ($1, $2, 'active', 0) RETURNING *`,
       [studentId, courseId]
     );
 
-    // Notify student
+    // Create student notification
     await pool.query(
-      `INSERT INTO notifications (user_id, title, message, type)
+      `INSERT INTO notifications (user_id, title, message, type) 
        VALUES ($1, 'Course Enrolled Successfully', $2, 'enrollment')`,
-      [studentId, `You are now enrolled in "${title}".`]
+      [studentId, `You have successfully joined "${title}". Start learning now!`]
     );
 
-    // Notify teacher
+    // Create instructor notification
     await pool.query(
-      `INSERT INTO notifications (user_id, title, message, type)
+      `INSERT INTO notifications (user_id, title, message, type) 
        VALUES ($1, 'New Student Enrolled', $2, 'enrollment')`,
-      [teacher_id, `${student_name} enrolled in "${title}".`]
+      [teacher_id, `${student_name} just enrolled in "${title}".`]
     );
 
-    return res.status(201).json({
-      message: "Successfully enrolled in course",
-      enrollment: result.rows[0]
+    // Audit log
+    await pool.query(
+      `INSERT INTO activity_log (user_id, activity_type, description, course_id) 
+       VALUES ($1, 'course_enrollment', $2, $3)`,
+      [studentId, `Enrolled in course: ${title}`, courseId]
+    );
+
+    return res.status(201).json({ 
+      message: "Successfully enrolled in course!", 
+      enrollment: result.rows[0] 
     });
   } catch (err) {
     next(err);
   }
 };
 
-// Unenroll a student from a course
 exports.unenroll = async (req, res, next) => {
   try {
-    const studentId = req.user.user_id || req.user.id;
+    const studentId = req.user.id;
     const targetId = parseInt(req.params.id, 10);
-
-    if (isNaN(targetId)) {
-      return res.status(400).json({ error: "Invalid ID provided." });
-    }
 
     const result = await pool.query(
       `DELETE FROM enrollments 
-       WHERE student_id = $1 AND (enrollment_id = $2 OR course_id = $2)
-       RETURNING enrollment_id`,
+       WHERE user_id = $1 AND (id = $2 OR course_id = $2) 
+       RETURNING id`,
       [studentId, targetId]
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Enrollment record not found." });
+      return res.status(404).json({ error: "Active enrollment record not found." });
     }
 
     return res.status(200).json({ message: "Successfully unenrolled from course." });

@@ -8,10 +8,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve frontend static files
 app.use(express.static(path.join(__dirname, "../frontend")));
 
-// Route Mounts
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
 app.use("/api/courses", require("./routes/courseRoutes"));
@@ -22,13 +20,13 @@ app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/friends", require("./routes/friendRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
+app.use("/api/classroom", require("./routes/classroomRoutes"));
+app.use("/api/assessments", require("./routes/assessmentRoutes"));
+app.use("/api/admin", require("./routes/adminRoutes"));
 
-// Global Error Handler
 app.use((err, req, res, next) => {
-  console.error("Internal Server Error:", err.stack);
-  res.status(err.status || 500).json({
-    error: err.message || "Internal Server Error"
-  });
+  console.error("Internal Server Error:", err);
+  res.status(err.status || 500).json({ error: err.message || "Internal Server Error" });
 });
 
 module.exports = app;

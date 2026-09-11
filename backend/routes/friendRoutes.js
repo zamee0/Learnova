@@ -1,8 +1,8 @@
 const router = require("express").Router();
-const friendController = require("../controllers/friendController");
+const c = require("../controllers/friendController");
 const { authMiddleware } = require("../middleware/authMiddleware");
-router.get("/", authMiddleware, friendController.getFriends);
-router.get("/requests", authMiddleware, friendController.getRequests);
-router.post("/request", authMiddleware, friendController.sendRequest);
-router.put("/request/:id", authMiddleware, friendController.respondRequest);
+router.get("/", authMiddleware, c.getFriends);
+router.get("/requests", authMiddleware, c.getRequests);
+router.post("/request", authMiddleware, c.sendRequest);
+router.put("/request/:id", authMiddleware, c.respondRequest);
 module.exports = router;

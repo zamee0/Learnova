@@ -2,29 +2,23 @@ const pool = require("../config/db");
 
 exports.getConversations = async (req, res, next) => {
   try {
-    const userId = req.user.user_id || req.user.id;
-
+    const userId = req.user.id;
     const query = `
       SELECT DISTINCT ON (other_user_id)
-        other_user_id,
-        other_user_name,
-        content AS last_message,
-        created_at
+        other_user_id, other_user_name, content AS last_message, is_read, sender_id, created_at
       FROM (
         SELECT 
           CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END AS other_user_id,
           CASE WHEN sender_id = $1 THEN ru.first_name || ' ' || ru.last_name ELSE su.first_name || ' ' || su.last_name END AS other_user_name,
-          content,
-          m.created_at
+          content, is_read, sender_id, m.created_at
         FROM messages m
-        JOIN users su ON m.sender_id = su.user_id
-        JOIN users ru ON m.receiver_id = ru.user_id
+        JOIN users su ON m.sender_id = su.id
+        JOIN users ru ON m.receiver_id = ru.id
         WHERE sender_id = $1 OR receiver_id = $1
         ORDER BY m.created_at DESC
       ) t
       ORDER BY other_user_id, created_at DESC
     `;
-
     const result = await pool.query(query, [userId]);
     return res.status(200).json(result.rows);
   } catch (err) {
@@ -34,26 +28,24 @@ exports.getConversations = async (req, res, next) => {
 
 exports.getMessagesWithUser = async (req, res, next) => {
   try {
-    const userId = req.user.user_id || req.user.id;
+    const userId = req.user.id;
     const otherUserId = parseInt(req.params.otherUserId, 10);
 
+    // Mark messages as read
+    await pool.query(
+      "UPDATE messages SET is_read = TRUE, read_at = CURRENT_TIMESTAMP WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE",
+      [otherUserId, userId]
+    );
+
     const query = `
-      SELECT 
-        m.message_id,
-        m.message_id AS id,
-        m.sender_id,
-        m.receiver_id,
-        m.content,
-        m.is_read,
-        m.created_at,
-        su.first_name || ' ' || su.last_name AS sender_name
+      SELECT m.id, m.sender_id, m.receiver_id, m.content, m.is_read, m.created_at,
+             su.first_name || ' ' || su.last_name AS sender_name
       FROM messages m
-      JOIN users su ON m.sender_id = su.user_id
+      JOIN users su ON m.sender_id = su.id
       WHERE (m.sender_id = $1 AND m.receiver_id = $2)
          OR (m.sender_id = $2 AND m.receiver_id = $1)
       ORDER BY m.created_at ASC
     `;
-
     const result = await pool.query(query, [userId, otherUserId]);
     return res.status(200).json(result.rows);
   } catch (err) {
@@ -63,7 +55,7 @@ exports.getMessagesWithUser = async (req, res, next) => {
 
 exports.sendMessage = async (req, res, next) => {
   try {
-    const senderId = req.user.user_id || req.user.id;
+    const senderId = req.user.id;
     const { receiver_id, content } = req.body;
     const receiverId = parseInt(receiver_id, 10);
 
@@ -72,9 +64,7 @@ exports.sendMessage = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO messages (sender_id, receiver_id, content)
-       VALUES ($1, $2, $3)
-       RETURNING *, message_id AS id`,
+      `INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3) RETURNING *`,
       [senderId, receiverId, content.trim()]
     );
 

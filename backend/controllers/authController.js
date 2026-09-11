@@ -5,18 +5,18 @@ const pool = require("../config/db");
 const JWT_SECRET = process.env.JWT_SECRET || "learnova_jwt_secret_2026";
 
 exports.signup = async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const { first_name, last_name, email, password, role, bio } = req.body;
+    const { first_name, last_name, email, password, role, bio, phone, address, avatar_url, institution, semester, designation, qualification } = req.body;
 
     if (!first_name || !last_name || !email || !password) {
       return res.status(400).json({ error: "First name, last name, email, and password are required." });
     }
 
-    const assignedRole = role === "teacher" ? "teacher" : "student";
+    const assignedRole = ['student', 'teacher', 'admin'].includes(role) ? role : 'student';
     const cleanEmail = email.toLowerCase().trim();
 
-    // Check existing email
-    const existing = await pool.query("SELECT user_id FROM users WHERE email = $1", [cleanEmail]);
+    const existing = await client.query("SELECT id FROM users WHERE email = $1", [cleanEmail]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: "An account with this email already exists." });
     }
@@ -24,31 +24,52 @@ exports.signup = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    const result = await pool.query(
-      `INSERT INTO users (first_name, last_name, email, password_hash, role, bio)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING user_id, user_id AS id, first_name, last_name, email, role, bio, avatar_url, created_at`,
-      [first_name.trim(), last_name.trim(), cleanEmail, password_hash, assignedRole, bio || null]
+    await client.query("BEGIN");
+
+    const userResult = await client.query(
+      `INSERT INTO users (first_name, last_name, email, password_hash, role, bio, phone, address, avatar_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, first_name, last_name, email, role, bio, avatar_url, created_at`,
+      [first_name.trim(), last_name.trim(), cleanEmail, password_hash, assignedRole, bio || null, phone || null, address || null, avatar_url || null]
     );
 
-    const user = result.rows[0];
+    const user = userResult.rows[0];
 
-    // Welcome notification
-    await pool.query(
+    if (assignedRole === "student") {
+      await client.query(
+        `INSERT INTO student_profiles (user_id, institution, semester) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id) DO UPDATE SET institution = EXCLUDED.institution, semester = EXCLUDED.semester`,
+        [user.id, institution || null, semester || null]
+      );
+    } else if (assignedRole === "teacher") {
+      await client.query(
+        `INSERT INTO teacher_profiles (user_id, designation, qualification) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id) DO UPDATE SET designation = EXCLUDED.designation, qualification = EXCLUDED.qualification`,
+        [user.id, designation || 'Instructor', qualification || null]
+      );
+    }
+
+    await client.query(
       `INSERT INTO notifications (user_id, title, message, type)
-       VALUES ($1, 'Welcome to Learnova!', 'Your account has been created successfully.', 'general')`,
-      [user.user_id]
+       VALUES ($1, 'Welcome to Learnova!', 'Your account has been successfully created.', 'general')`,
+      [user.id]
     );
 
-    const token = jwt.sign(
-      { user_id: user.user_id, id: user.user_id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
+    await client.query(
+      `INSERT INTO activity_log (user_id, activity_type, description)
+       VALUES ($1, 'account_created', 'Signed up for a Learnova account.')`,
+      [user.id]
     );
 
+    await client.query("COMMIT");
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
     return res.status(201).json({ message: "Registration successful", token, user });
   } catch (err) {
+    await client.query("ROLLBACK");
     next(err);
+  } finally {
+    client.release();
   }
 };
 
@@ -60,30 +81,24 @@ exports.login = async (req, res, next) => {
       return res.status(400).json({ error: "Email and password are required." });
     }
 
-    const result = await pool.query(
-      "SELECT user_id, user_id AS id, first_name, last_name, email, password_hash, role, bio, avatar_url, created_at FROM users WHERE email = $1",
-      [email.toLowerCase().trim()]
-    );
-
+    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase().trim()]);
     if (result.rows.length === 0) {
       return res.status(400).json({ error: "Invalid email or password." });
     }
 
     const user = result.rows[0];
+    if (!user.is_active) {
+      return res.status(403).json({ error: "This account has been deactivated. Please contact support." });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid email or password." });
     }
 
-    // Update active timestamp
-    await pool.query("UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE user_id = $1", [user.user_id]);
+    await pool.query("UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = $1", [user.id]);
 
-    const token = jwt.sign(
-      { user_id: user.user_id, id: user.user_id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
     delete user.password_hash;
 
     return res.status(200).json({ message: "Login successful", token, user });

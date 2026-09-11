@@ -1,7 +1,7 @@
 const router = require("express").Router();
-const messageController = require("../controllers/messageController");
+const c = require("../controllers/messageController");
 const { authMiddleware } = require("../middleware/authMiddleware");
-router.get("/", authMiddleware, messageController.getConversations);
-router.get("/:otherUserId", authMiddleware, messageController.getMessagesWithUser);
-router.post("/", authMiddleware, messageController.sendMessage);
+router.get("/", authMiddleware, c.getConversations);
+router.get("/:otherUserId", authMiddleware, c.getMessagesWithUser);
+router.post("/", authMiddleware, c.sendMessage);
 module.exports = router;

@@ -1,9 +1,9 @@
 const router = require("express").Router();
-const discussionController = require("../controllers/discussionController");
+const c = require("../controllers/discussionController");
 const { authMiddleware } = require("../middleware/authMiddleware");
-router.get("/my-discussions", authMiddleware, discussionController.getAllMyDiscussions);
-router.get("/course/:courseId", authMiddleware, discussionController.getDiscussionsByCourse);
-router.post("/", authMiddleware, discussionController.createDiscussion);
-router.get("/:id/replies", authMiddleware, discussionController.getReplies);
-router.post("/:id/replies", authMiddleware, discussionController.createReply);
+router.get("/my-discussions", authMiddleware, c.getAllMyDiscussions);
+router.get("/course/:courseId", authMiddleware, c.getDiscussionsByCourse);
+router.post("/", authMiddleware, c.createDiscussion);
+router.get("/:id/replies", authMiddleware, c.getReplies);
+router.post("/:id/replies", authMiddleware, c.createReply);
 module.exports = router;

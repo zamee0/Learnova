@@ -1,6 +1,6 @@
 const router = require("express").Router();
-const enrollmentController = require("../controllers/enrollmentController");
+const c = require("../controllers/enrollmentController");
 const { authMiddleware, studentOnly } = require("../middleware/authMiddleware");
-router.post("/", authMiddleware, studentOnly, enrollmentController.enroll);
-router.delete("/:id", authMiddleware, studentOnly, enrollmentController.unenroll);
+router.post("/", authMiddleware, studentOnly, c.enroll);
+router.delete("/:id", authMiddleware, studentOnly, c.unenroll);
 module.exports = router;

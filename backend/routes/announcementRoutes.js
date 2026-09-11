@@ -1,7 +1,7 @@
 const router = require("express").Router();
-const announcementController = require("../controllers/announcementController");
+const c = require("../controllers/announcementController");
 const { authMiddleware, teacherOnly } = require("../middleware/authMiddleware");
-router.get("/recent", authMiddleware, announcementController.getRecentAnnouncements);
-router.get("/course/:courseId", announcementController.getAnnouncementsByCourse);
-router.post("/", authMiddleware, teacherOnly, announcementController.createAnnouncement);
+router.get("/recent", authMiddleware, c.getRecentAnnouncements);
+router.get("/course/:courseId", c.getAnnouncementsByCourse);
+router.post("/", authMiddleware, teacherOnly, c.createAnnouncement);
 module.exports = router;
