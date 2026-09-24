@@ -104,3 +104,17 @@ Base URL: `http://localhost:5000/api`
 4. Teacher posts an announcement → student checks notifications
 5. Student posts a discussion thread → teacher replies
 6. Student sends a friend request to another student → try messaging (blocked) → other student accepts → message again (works)
+
+## Admin console
+
+Admins can view the activity totals, suspend or restore accounts, and remove courses from `/admin.html`. Admin routes require a JWT whose role is `admin`; the regular signup page intentionally never grants that role.
+
+To create the first administrator, register a normal account, then run this once against the Learnova database (replace the email):
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
+```
+
+Sign out and sign back in; the login response will send that account to the Admin Console. Use a unique, strong password for the account and keep database access restricted to trusted operators.
+
+For an existing database, apply `database/migrations/20260923_profiles_assessments_uploads.sql` before starting the updated app. Set `DATABASE_SSL=true` when the configured PostgreSQL server requires SSL.

@@ -3,62 +3,58 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!user) return;
   renderNavigation("my-courses");
 
-  const myCoursesGrid = document.getElementById("myCoursesGrid");
+  const grid = document.getElementById("myCoursesGrid");
   const isTeacher = user.role === "teacher";
 
-  async function loadMyCourses() {
+  async function loadCourses() {
     try {
-      myCoursesGrid.innerHTML = `<div class="state-container"><div class="spinner"></div><p>Loading your courses...</p></div>`;
       const endpoint = isTeacher ? "/courses/teaching" : "/courses/my-courses";
       const courses = await apiFetch(endpoint);
 
-      if (!courses || courses.length === 0) {
-        myCoursesGrid.innerHTML = `
-          <div class="state-container" style="grid-column: 1/-1;">
-            <i class="fa-solid fa-graduation-cap"></i>
+      if (!courses.length) {
+        grid.innerHTML = `
+          <div style="grid-column:1/-1; text-align:center; padding:3rem 0; color:var(--gray-500);">
+            <i class="fa-solid fa-graduation-cap" style="font-size:3rem; margin-bottom:1rem;"></i>
             <p>${isTeacher ? 'You have not created any courses yet.' : 'You are not enrolled in any courses yet.'}</p>
             <a href="${isTeacher ? '/teacher-course.html' : '/courses.html'}" class="btn btn-primary" style="margin-top:1rem;">
-              ${isTeacher ? 'Create a Course' : 'Browse Courses'}
+              ${isTeacher ? 'Create Course' : 'Browse Courses'}
             </a>
-          </div>`;
+          </div>
+        `;
         return;
       }
 
-      myCoursesGrid.innerHTML = courses.map(c => `
+      grid.innerHTML = courses.map(c => `
         <div class="course-card">
-          <img class="course-thumb" src="${c.thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop'}" alt="${c.title}">
+          <img class="course-thumb" src="${c.thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800'}" alt="${c.title}">
           <div class="course-content">
             <div class="course-meta">
-              <span class="badge badge-primary">${c.category || 'General'}</span>
-              <span class="badge badge-info">${c.level || 'All Levels'}</span>
+              <span class="badge badge-primary">${c.category}</span>
+              ${!isTeacher && c.checkpoint_code ? '<span class="badge badge-success"><i class="fa-solid fa-award"></i> Completed</span>' : ''}
             </div>
             <h3 class="course-title">${c.title}</h3>
-            <p class="course-desc">${c.description || ''}</p>
+            <p class="course-desc">${c.description}</p>
             <div class="course-footer">
-              <a href="/course.html?id=${c.id || c.course_id}" class="btn btn-primary btn-sm">Open Course</a>
+              <a href="/course.html?id=${c.id || c.course_id}" class="btn btn-primary btn-sm">Enter Course Workspace</a>
               ${!isTeacher ? `
-                <button class="btn btn-outline btn-sm btn-danger" onclick="unenrollCourse(${c.enrollment_id || c.id})">
-                  <i class="fa-solid fa-arrow-right-from-bracket"></i> Unenroll
-                </button>
+                <button class="btn btn-outline btn-sm btn-danger" onclick="dropCourse(${c.id || c.course_id})">Unenroll</button>
               ` : ''}
             </div>
           </div>
         </div>
       `).join("");
     } catch (err) {
-      myCoursesGrid.innerHTML = `<div class="alert alert-danger">Error: ${err.message}</div>`;
+      grid.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
     }
   }
 
-  window.unenrollCourse = async function(enrollmentId) {
+  window.dropCourse = async function(courseId) {
     if (!confirm("Are you sure you want to unenroll from this course?")) return;
     try {
-      await apiFetch(`/enrollments/${enrollmentId}`, { method: "DELETE" });
-      loadMyCourses();
-    } catch (err) {
-      alert(err.message);
-    }
+      await apiFetch(`/enrollments/${courseId}`, { method: "DELETE" });
+      loadCourses();
+    } catch (err) { alert(err.message); }
   };
 
-  loadMyCourses();
+  loadCourses();
 });

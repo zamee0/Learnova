@@ -45,7 +45,7 @@ exports.getCourseById = async (req, res, next) => {
 
     const query = `
       SELECT 
-        c.id, c.title, c.description, c.category, c.level, c.thumbnail_url, c.teacher_id, c.created_at,
+        c.id, c.title, c.description, c.category, c.level, c.thumbnail_url, c.teacher_id, c.is_published, c.created_at,
         u.first_name || ' ' || u.last_name AS teacher_name,
         u.email AS teacher_email,
         u.bio AS teacher_bio,
@@ -56,7 +56,7 @@ exports.getCourseById = async (req, res, next) => {
         COUNT(DISTINCT r.id)::int AS review_count,
         CASE 
           WHEN $2::int IS NOT NULL AND EXISTS (
-            SELECT 1 FROM enrollments WHERE user_id = $2::int AND course_id = c.id AND status = 'active'
+            SELECT 1 FROM enrollments WHERE user_id = $2::int AND course_id = c.id AND status IN ('active','completed')
           ) THEN TRUE ELSE FALSE 
         END AS is_enrolled,
         CASE 
@@ -79,6 +79,7 @@ exports.getCourseById = async (req, res, next) => {
     `;
     const result = await pool.query(query, [courseId, currentUserId]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Course not found." });
+    if (!result.rows[0].is_published && result.rows[0].teacher_id !== currentUserId && req.user?.role !== 'admin') return res.status(404).json({ error: "Course not found." });
 
     return res.status(200).json(result.rows[0]);
   } catch (err) {
@@ -88,16 +89,16 @@ exports.getCourseById = async (req, res, next) => {
 
 exports.createCourse = async (req, res, next) => {
   try {
-    const { title, description, category, level, thumbnail_url } = req.body;
-    if (!title || !description || !category) {
+    const { title, description, category, level, thumbnail_url, is_published = true } = req.body;
+    if (![title, description, category].every(v => typeof v === 'string' && v.trim()) || (level && !['Beginner', 'Intermediate', 'Advanced', 'All Levels'].includes(level)) || (typeof is_published !== 'boolean')) {
       return res.status(400).json({ error: "Title, description, and category are required." });
     }
 
     const result = await pool.query(
-      `INSERT INTO courses (teacher_id, title, description, category, level, thumbnail_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO courses (teacher_id, title, description, category, level, thumbnail_url, is_published)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [req.user.id, title.trim(), description.trim(), category.trim(), level || 'Beginner', thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800']
+      [req.user.id, title.trim(), description.trim(), category.trim(), level || 'Beginner', thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800', Boolean(is_published)]
     );
 
     await pool.query(
@@ -106,7 +107,7 @@ exports.createCourse = async (req, res, next) => {
       [req.user.id, `Created new course: ${title}`, result.rows[0].id]
     );
 
-    return res.status(201).json({ message: "Course published successfully", course: result.rows[0] });
+    return res.status(201).json({ message: result.rows[0].is_published ? "Course published successfully" : "Draft saved successfully", course: result.rows[0] });
   } catch (err) {
     next(err);
   }
@@ -115,10 +116,12 @@ exports.createCourse = async (req, res, next) => {
 exports.updateCourse = async (req, res, next) => {
   try {
     const courseId = parseInt(req.params.id, 10);
-    const { title, description, category, level, thumbnail_url } = req.body;
+    const { title, description, category, level, thumbnail_url, is_published } = req.body;
+    if ((title != null && (typeof title !== 'string' || !title.trim())) || (description != null && (typeof description !== 'string' || !description.trim())) || (category != null && (typeof category !== 'string' || !category.trim())) || (level != null && !['Beginner', 'Intermediate', 'Advanced', 'All Levels'].includes(level)) || (is_published != null && typeof is_published !== 'boolean')) return res.status(400).json({ error: "Invalid course fields." });
 
     const owner = await pool.query("SELECT teacher_id FROM courses WHERE id = $1", [courseId]);
     if (owner.rows.length === 0) return res.status(404).json({ error: "Course not found." });
+    if (req.user.role !== 'teacher' && req.user.role !== 'admin') return res.status(403).json({ error: "Teacher privileges required." });
     if (owner.rows[0].teacher_id !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: "Unauthorized to modify this course." });
     }
@@ -130,10 +133,11 @@ exports.updateCourse = async (req, res, next) => {
            category = COALESCE($3, category),
            level = COALESCE($4, level),
            thumbnail_url = COALESCE($5, thumbnail_url),
+           is_published = COALESCE($6, is_published),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6
+        WHERE id = $7
        RETURNING *`,
-      [title, description, category, level, thumbnail_url, courseId]
+      [title, description, category, level, thumbnail_url, is_published, courseId]
     );
 
     return res.status(200).json({ message: "Course updated successfully", course: updated.rows[0] });
@@ -239,6 +243,7 @@ exports.addReview = async (req, res, next) => {
   try {
     const courseId = parseInt(req.params.id, 10);
     const { rating, review } = req.body;
+    if (!Number.isInteger(courseId) || courseId <= 0 || (review != null && (typeof review !== 'string' || review.length > 3000))) return res.status(400).json({ error: "Invalid course review." });
     const numRating = parseFloat(rating);
 
     if (isNaN(numRating) || numRating < 0 || numRating > 10) {
@@ -250,14 +255,19 @@ exports.addReview = async (req, res, next) => {
       return res.status(403).json({ error: "You must be enrolled in this course to leave a review." });
     }
 
-    await pool.query(
-      `INSERT INTO course_reviews (course_id, student_id, rating, review)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (course_id, student_id) DO UPDATE SET rating = EXCLUDED.rating, review = EXCLUDED.review, updated_at = CURRENT_TIMESTAMP`,
-      [courseId, req.user.id, numRating, review || null]
-    );
-
-    return res.status(201).json({ message: "Course review submitted successfully!" });
+    if (req.user.role !== 'student') return res.status(403).json({ error: "Only students can review courses." });
+    try {
+      const result = await pool.query(
+        `INSERT INTO course_reviews (course_id, student_id, rating, review) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [courseId, req.user.id, numRating, typeof review === 'string' ? review.trim() : null]
+      );
+      return res.status(201).json({ message: "Course review submitted successfully!", review: result.rows[0] });
+    } catch (err) {
+      if (err.code !== '23505') throw err;
+      if (req.method !== 'PUT') return res.status(409).json({ error: "You have already reviewed this course." });
+      const updated = await pool.query(`UPDATE course_reviews SET rating = $1, review = $2, updated_at = CURRENT_TIMESTAMP WHERE course_id = $3 AND student_id = $4 RETURNING *`, [numRating, typeof review === 'string' ? review.trim() : null, courseId, req.user.id]);
+      return res.status(200).json({ message: "Course review updated.", review: updated.rows[0] });
+    }
   } catch (err) {
     next(err);
   }
@@ -267,7 +277,7 @@ exports.getReviews = async (req, res, next) => {
   try {
     const courseId = parseInt(req.params.id, 10);
     const reviews = await pool.query(
-      `SELECT r.id, r.rating, r.review, r.created_at, u.first_name || ' ' || u.last_name AS student_name, u.avatar_url
+      `SELECT r.id, r.student_id, r.rating, r.review, r.created_at, u.first_name || ' ' || u.last_name AS student_name, u.avatar_url
        FROM course_reviews r
        JOIN users u ON r.student_id = u.id
        WHERE r.course_id = $1

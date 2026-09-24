@@ -31,7 +31,11 @@ exports.toggleUserStatus = async (req, res, next) => {
   try {
     const userId = parseInt(req.params.id, 10);
     const { is_active } = req.body;
-    await pool.query("UPDATE users SET is_active = $1 WHERE id = $2", [!!is_active, userId]);
+    if (!Number.isInteger(userId) || userId <= 0 || typeof is_active !== 'boolean') return res.status(400).json({ error: "Provide a valid user and active state." });
+    if (userId === req.user.id && !is_active) return res.status(400).json({ error: "You cannot suspend your own admin account." });
+    const result = await pool.query("UPDATE users SET is_active = $1 WHERE id = $2", [is_active, userId]);
+    if (!result.rowCount) return res.status(404).json({ error: "User not found." });
+    if (!is_active) req.app.get('io')?.in(`user:${userId}`).disconnectSockets(true);
     return res.status(200).json({ message: `User status set to ${is_active ? 'active' : 'suspended'}.` });
   } catch (err) {
     next(err);
@@ -41,7 +45,9 @@ exports.toggleUserStatus = async (req, res, next) => {
 exports.deleteCourse = async (req, res, next) => {
   try {
     const courseId = parseInt(req.params.id, 10);
-    await pool.query("DELETE FROM courses WHERE id = $1", [courseId]);
+    if (!Number.isInteger(courseId) || courseId <= 0) return res.status(400).json({ error: "Invalid course ID." });
+    const result = await pool.query("DELETE FROM courses WHERE id = $1", [courseId]);
+    if (!result.rowCount) return res.status(404).json({ error: "Course not found." });
     return res.status(200).json({ message: "Course removed by administrator." });
   } catch (err) {
     next(err);

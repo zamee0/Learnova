@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Profile — Learnova</title>
+  <title>User Profile & Search — Learnova</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/dashboard.css">
@@ -11,34 +11,69 @@
 <body>
   <div class="app-container">
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a>
-      </div>
+      <div class="sidebar-header"><a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a></div>
       <ul class="sidebar-nav" id="sidebarNav"></ul>
-      <div class="sidebar-footer">
-        <button class="btn btn-outline" style="width:100%;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
-      </div>
+      <div class="sidebar-footer"><button class="btn btn-outline" style="width:100%;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button></div>
     </aside>
 
     <div class="main-wrapper">
       <header class="topbar">
-        <div class="topbar-left">
-          <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('active')"><i class="fa-solid fa-bars"></i></button>
-          <h1 class="topbar-title">My Profile</h1>
-        </div>
-        <div class="topbar-right">
-          <div class="user-profile-badge">
-            <div class="avatar current-user-avatar"></div>
-            <div class="user-info-text">
-              <span class="user-name current-user-name"></span>
-              <span class="user-role-badge current-user-role"></span>
-            </div>
-          </div>
-        </div>
+        <h1 class="topbar-title">Profile & Network Search</h1>
       </header>
 
-      <main class="content-body">
-        <div class="card" id="profileCard" style="max-width:650px;"></div>
+      <main class="content-body" style="display:grid; grid-template-columns:1.2fr 1fr; gap:2rem;">
+        <div>
+          <div class="card" id="myProfileCard" style="margin-bottom:2rem;"></div>
+          <div class="card" id="profileInsights" style="margin-bottom:2rem;"><h3>Learning & Teaching Insights</h3><div id="profileChart" style="margin-top:1rem"></div></div>
+
+          <div class="card">
+            <h3>Edit Profile Details</h3>
+            <form onsubmit="saveProfileUpdates(event)" style="margin-top:1rem;">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group"><label class="form-label">First Name</label><input type="text" id="profFirst" class="form-control" required></div>
+                <div class="form-group"><label class="form-label">Last Name</label><input type="text" id="profLast" class="form-control" required></div>
+              </div>
+              <div class="form-group"><label class="form-label">Profile Picture</label><input type="url" id="profAvatar" class="form-control" placeholder="Image URL (optional)"><input type="file" id="profAvatarFile" class="form-control" accept="image/jpeg,image/png,image/webp" style="margin-top:.5rem"><div id="avatarDrop" tabindex="0" style="padding:1rem;border:1px dashed var(--primary);margin-top:.5rem">Drop an image here or choose a file above (max 4 MB)</div><img id="avatarPreview" alt="Profile picture preview" style="display:none;width:100px;height:100px;object-fit:cover;border-radius:50%;margin-top:.5rem"></div>
+              <div class="form-group"><label class="form-label">Bio</label><textarea id="profBio" class="form-control" rows="3"></textarea></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group"><label class="form-label">Phone</label><input type="text" id="profPhone" class="form-control"></div>
+                <div class="form-group"><label class="form-label">Address</label><input type="text" id="profAddress" class="form-control"></div>
+              </div>
+
+              <!-- Role Specific Edit Fields -->
+              <div id="studentEditFields">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                  <div class="form-group"><label class="form-label">Institution</label><input type="text" id="profInstitution" class="form-control"></div>
+                  <div class="form-group"><label class="form-label">Semester</label><input type="text" id="profSemester" class="form-control"></div>
+                </div>
+              </div>
+
+              <div id="teacherEditFields" style="display:none;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                  <div class="form-group"><label class="form-label">Designation</label><input type="text" id="profDesignation" class="form-control"></div>
+                  <div class="form-group"><label class="form-label">Qualification</label><input type="text" id="profQualification" class="form-control"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Qualifications (JSON array)</label><textarea id="profQualifications" class="form-control" rows="5" placeholder='[{"degree":"...","institute":"...","experience":"...","certifications":"..."}]'></textarea></div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+            </form>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:2rem;">
+            <h3><i class="fa-solid fa-magnifying-glass"></i> Search Users</h3>
+            <p style="font-size:0.85rem; color:var(--gray-500); margin-bottom:1rem;">Search any learner or instructor to view enrolled courses & activity logs.</p>
+            <input type="text" id="userSearchInput" class="form-control" placeholder="Search by name..." oninput="handleUserSearch(this.value)">
+            <div id="searchResultsList" style="margin-top:1rem;"></div>
+          </div>
+
+          <div class="card" id="userActivityCard" style="display:none;">
+            <h3 id="activityOwnerTitle">Activity Log</h3>
+            <div id="activityLogFeed" style="margin-top:1rem;"></div>
+          </div>
+        </div>
       </main>
     </div>
   </div>

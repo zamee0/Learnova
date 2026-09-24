@@ -39,13 +39,7 @@
 
       <main class="content-body" style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
         <div>
-          <div class="card" style="margin-bottom:1.5rem;">
-            <h3 style="font-size:1.1rem; font-weight:600; margin-bottom:1rem;"><i class="fa-solid fa-user-plus"></i> Send Friend Request</h3>
-            <form id="sendRequestForm" style="display:flex; gap:0.5rem;">
-              <input type="number" id="receiverIdInput" class="form-control" placeholder="Enter User ID..." required>
-              <button type="submit" class="btn btn-primary">Send</button>
-            </form>
-          </div>
+          <div class="card" style="margin-bottom:1.5rem;"><h3><i class="fa-solid fa-user-plus"></i> Community</h3><input id="communitySearch" class="form-control" placeholder="Search people by name or role..." oninput="searchCommunity(this.value)"><div id="communityResults" style="margin-top:1rem"></div></div>
           <h3 style="font-size:1.1rem; font-weight:600; margin-bottom:1rem;"><i class="fa-solid fa-users"></i> Current Friends</h3>
           <div id="friendsList"></div>
         </div>

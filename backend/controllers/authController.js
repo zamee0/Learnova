@@ -7,18 +7,22 @@ const JWT_SECRET = process.env.JWT_SECRET || "learnova_jwt_secret_2026";
 exports.signup = async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { first_name, last_name, email, password, role, bio, phone, address, avatar_url, institution, semester, designation, qualification } = req.body;
+    const { first_name, last_name, email, password, role, bio, phone, address, avatar_url, institution, semester, designation, qualification, qualifications } = req.body;
 
-    if (!first_name || !last_name || !email || !password) {
+    if (![first_name, last_name, email, password].every(v => typeof v === 'string' && v.trim())) {
       return res.status(400).json({ error: "First name, last name, email, and password are required." });
     }
 
-    const assignedRole = ['student', 'teacher', 'admin'].includes(role) ? role : 'student';
+    const assignedRole = ['student', 'teacher'].includes(role) ? role : 'student';
+    const teacherQualifications = Array.isArray(qualifications) ? qualifications : qualification ? [{ degree: qualification, institute: '', experience: '', certifications: '' }] : [];
+    if (assignedRole === 'teacher' && (typeof bio !== 'string' || !bio.trim() || !teacherQualifications.length || teacherQualifications.some(q => !q || ['degree', 'institute', 'experience', 'certifications'].some(key => typeof q[key] !== 'string' || !q[key].trim())))) {
+      return res.status(400).json({ error: "Teachers must provide a bio and degree, institute, experience, and certifications." });
+    }
     const cleanEmail = email.toLowerCase().trim();
 
     const existing = await client.query("SELECT id FROM users WHERE email = $1", [cleanEmail]);
     if (existing.rows.length > 0) {
-      return res.status(400).json({ error: "An account with this email already exists." });
+      return res.status(409).json({ error: "An account with this email already exists." });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -43,9 +47,9 @@ exports.signup = async (req, res, next) => {
       );
     } else if (assignedRole === "teacher") {
       await client.query(
-        `INSERT INTO teacher_profiles (user_id, designation, qualification) VALUES ($1, $2, $3)
-         ON CONFLICT (user_id) DO UPDATE SET designation = EXCLUDED.designation, qualification = EXCLUDED.qualification`,
-        [user.id, designation || 'Instructor', qualification || null]
+        `INSERT INTO teacher_profiles (user_id, designation, qualification, qualifications) VALUES ($1, $2, $3, $4::jsonb)
+         ON CONFLICT (user_id) DO UPDATE SET designation = EXCLUDED.designation, qualification = EXCLUDED.qualification, qualifications = EXCLUDED.qualifications`,
+        [user.id, designation || 'Instructor', teacherQualifications[0]?.degree || null, JSON.stringify(teacherQualifications)]
       );
     }
 

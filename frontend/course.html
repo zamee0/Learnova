@@ -3,79 +3,183 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Course Details — Learnova</title>
+  <title>Course Workspace — Learnova</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/dashboard.css">
+  <style>
+    .tab-bar { display:flex; gap:0.5rem; border-bottom:2px solid var(--border); margin-bottom:1.5rem; overflow-x:auto; }
+    .tab-btn { padding:0.75rem 1.25rem; border:none; background:none; font-weight:600; color:var(--gray-500); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; }
+    .tab-btn.active { color:var(--primary); border-color:var(--primary); }
+  </style>
 </head>
 <body>
   <div class="app-container">
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a>
-      </div>
+      <div class="sidebar-header"><a href="/dashboard.html" class="sidebar-logo"><i class="fa-solid fa-graduation-cap"></i> Learnova</a></div>
       <ul class="sidebar-nav" id="sidebarNav"></ul>
-      <div class="sidebar-footer">
-        <button class="btn btn-outline" style="width:100%;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
-      </div>
+      <div class="sidebar-footer"><button class="btn btn-outline" style="width:100%;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button></div>
     </aside>
 
     <div class="main-wrapper">
       <header class="topbar">
-        <div class="topbar-left">
-          <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('active')"><i class="fa-solid fa-bars"></i></button>
-          <h1 class="topbar-title">Course Details</h1>
-        </div>
+        <h1 class="topbar-title" id="topCourseTitle">Course Workspace</h1>
         <div class="topbar-right">
           <div class="user-profile-badge">
-            <div class="avatar current-user-avatar"></div>
-            <div class="user-info-text">
-              <span class="user-name current-user-name"></span>
-              <span class="user-role-badge current-user-role"></span>
-            </div>
+            <div class="user-info-text"><span class="user-name current-user-name"></span><span class="user-role-badge current-user-role"></span></div>
           </div>
         </div>
       </header>
 
       <main class="content-body">
-        <div class="card" id="courseDetails" style="margin-bottom:2rem;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
+        <div class="card" style="margin-bottom:1.5rem; overflow:hidden; padding:0;">
+          <img id="courseBanner" style="width:100%; height:220px; object-fit:cover; background:#e2e8f0;" src="" alt="Cover">
+          <div style="padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
             <div>
               <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
-                <span class="badge badge-primary" id="courseCategory"></span>
-                <span class="badge badge-info" id="courseLevel"></span>
+                <span class="badge badge-primary" id="cCategory"></span>
+                <span class="badge badge-info" id="cLevel"></span>
+                <span class="badge badge-warning" id="cRating"><i class="fa-solid fa-star"></i> 0.0</span>
               </div>
-              <h2 id="courseTitle" style="font-size:1.75rem; font-weight:700;"></h2>
-              <p style="color:var(--gray-500); font-size:0.9rem; margin-top:0.25rem;">
-                Instructor: <strong id="courseTeacher" style="color:var(--gray-900);"></strong>
-              </p>
+              <h2 id="cTitle" style="font-size:1.6rem; font-weight:700;"></h2>
+              <p style="color:var(--gray-500); font-size:0.9rem;">Instructor: <strong id="cTeacher"></strong></p>
             </div>
-            <button id="enrollBtn" class="btn btn-primary" style="display:none;"><i class="fa-solid fa-plus"></i> Enroll Now</button>
+            <div id="courseActionBtnZone"></div>
           </div>
-          <p id="courseDesc" style="color:var(--gray-700); line-height:1.6;"></p>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
-          <div>
-            <h3 style="font-size:1.25rem; font-weight:600; margin-bottom:1rem;"><i class="fa-solid fa-bullhorn"></i> Announcements</h3>
-            <div id="announcementsList"></div>
+        <div class="tab-bar">
+          <button class="tab-btn active" onclick="switchTab('overview')"><i class="fa-solid fa-circle-info"></i> Overview</button>
+          <button class="tab-btn" onclick="switchTab('classroom')"><i class="fa-solid fa-chalkboard"></i> Notes & Feed</button>
+          <button class="tab-btn" onclick="switchTab('videos')"><i class="fa-brands fa-youtube"></i> Video Lectures</button>
+          <button class="tab-btn" onclick="switchTab('live')"><i class="fa-solid fa-video"></i> Live Classes</button>
+          <button class="tab-btn" onclick="switchTab('assignments')"><i class="fa-solid fa-file-pen"></i> Assignments</button>
+          <button class="tab-btn" onclick="switchTab('exams')"><i class="fa-solid fa-stopwatch"></i> Timed Exams</button>
+          <button class="tab-btn" onclick="switchTab('discussions')"><i class="fa-solid fa-comments"></i> Q&A</button>
+          <button class="tab-btn" onclick="switchTab('reviews')"><i class="fa-solid fa-star"></i> Ratings & Reviews</button>
+          <button class="tab-btn" id="teacherStudentsTab" style="display:none;" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> Enrolled Students</button>
+        </div>
+
+        <div id="tabOverview" class="tab-content">
+          <div class="card">
+            <h3 style="margin-bottom:0.75rem;">About This Course</h3>
+            <p id="cDesc" style="line-height:1.6; color:var(--gray-700); margin-bottom:1.5rem;"></p>
+            <div id="checkpointClaimZone" style="display:none;" class="alert alert-success">
+              <h4><i class="fa-solid fa-certificate"></i> Course Completion Checkpoint</h4>
+              <p>You have satisfied the requirements for this course. Click below to claim your verified checkpoint code.</p>
+              <button class="btn btn-primary btn-sm" style="margin-top:0.5rem;" onclick="claimCheckpoint()">Claim Checkpoint Code</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="tabClassroom" class="tab-content" style="display:none;">
+          <div id="teacherNotePostZone" style="display:none;" class="card" style="margin-bottom:1.5rem;">
+            <h4><i class="fa-solid fa-pen-nib"></i> Post Classroom Note</h4>
+            <form onsubmit="postClassNote(event)">
+              <div class="form-group"><input type="text" id="noteTitle" class="form-control" placeholder="Topic title..." required></div>
+              <div class="form-group"><textarea id="noteContent" class="form-control" rows="3" placeholder="Lesson summary, reference formulas, notes..." required></textarea></div>
+              <div class="form-group"><label class="form-label">Attach a note file (up to 5 MB)</label><input type="file" id="noteFile" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.webp,.zip"><div id="noteDrop" style="padding:1rem;border:1px dashed var(--primary);margin-top:.4rem">Drag and drop the file here</div></div>
+              <button type="submit" class="btn btn-primary btn-sm">Publish Note</button>
+            </form>
+          </div>
+          <div id="classroomFeed"></div>
+        </div>
+
+        <div id="tabVideos" class="tab-content" style="display:none;">
+          <div id="teacherVideoPostZone" style="display:none;" class="card" style="margin-bottom:1.5rem;">
+            <h4><i class="fa-brands fa-youtube"></i> Share YouTube Video Lecture</h4>
+            <form onsubmit="postVideoLecture(event)">
+              <div class="form-group"><input type="text" id="vidTitle" class="form-control" placeholder="Lecture Title..." required></div>
+              <div class="form-group"><input type="url" id="vidUrl" class="form-control" placeholder="https://www.youtube.com/watch?v=..." required></div>
+              <button type="submit" class="btn btn-primary btn-sm">Add Video</button>
+            </form>
+          </div>
+          <div id="videosGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1.5rem;"></div>
+        </div>
+
+        <div id="tabLive" class="tab-content" style="display:none;">
+          <div id="teacherLivePostZone" style="display:none;" class="card" style="margin-bottom:1.5rem;">
+            <h4><i class="fa-solid fa-video"></i> Schedule Live Class Meeting</h4>
+            <form onsubmit="postLiveClass(event)">
+              <div class="form-group"><input type="text" id="liveTitle" class="form-control" placeholder="Session Title..." required></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                  <select id="livePlatform" class="form-select">
+                    <option value="google_meet">Google Meet</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="google_classroom">Google Classroom</option>
+                  </select>
+                </div>
+                <div class="form-group"><input type="url" id="liveMeetingUrl" class="form-control" placeholder="Meeting link URL..." required></div>
+              </div>
+              <div class="form-group"><input type="datetime-local" id="liveStartTime" class="form-control" required></div>
+              <button type="submit" class="btn btn-primary btn-sm">Schedule Meeting</button>
+            </form>
+          </div>
+          <div id="liveClassesList"></div>
+        </div>
+
+        <div id="tabAssignments" class="tab-content" style="display:none;">
+          <div id="teacherAssignPostZone" style="display:none;" class="card" style="margin-bottom:1.5rem;">
+            <h4><i class="fa-solid fa-plus-circle"></i> Create Assignment</h4>
+            <form onsubmit="postAssignment(event)"><div id="assignmentRows"></div><button type="button" class="btn btn-outline btn-sm" onclick="addAssignmentRow()">Add another assignment</button> <button type="submit" class="btn btn-primary btn-sm">Publish all assignments</button></form>
+          </div>
+          <div id="assignmentsList"></div>
+        </div>
+
+        <div id="tabExams" class="tab-content" style="display:none;">
+          <!-- Teacher Create Exam Box -->
+          <div id="teacherExamCreateZone" style="display:none;" class="card" style="margin-bottom:1.5rem;">
+            <h4><i class="fa-solid fa-plus-circle"></i> Create Timed Exam</h4>
+            <form onsubmit="createTeacherExam(event)">
+              <div class="form-group"><input type="text" id="exTitle" class="form-control" placeholder="Exam Title (e.g. Midterm Quiz)..." required></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem;">
+                <div class="form-group"><label class="form-label">Duration (Minutes)</label><input type="number" id="exDuration" class="form-control" value="30" required></div>
+                <div class="form-group"><label class="form-label">Start Window</label><input type="datetime-local" id="exStart" class="form-control" required></div>
+                <div class="form-group"><label class="form-label">End Window</label><input type="datetime-local" id="exEnd" class="form-control" required></div>
+              </div>
+              <div id="examQuestionRows"></div><button type="button" class="btn btn-outline btn-sm" onclick="addExamQuestion()">Add question</button>
+              <button type="submit" class="btn btn-primary btn-sm">Publish Exam</button>
+            </form>
           </div>
 
-          <div>
-            <h3 style="font-size:1.25rem; font-weight:600; margin-bottom:1rem;"><i class="fa-solid fa-comments"></i> Q&A Discussions</h3>
-            <div class="card" style="margin-bottom:1.5rem;">
-              <h4 style="font-size:0.95rem; font-weight:600; margin-bottom:0.75rem;">Ask a Question / Start Discussion</h4>
-              <form id="newDiscussionForm">
-                <div class="form-group">
-                  <input type="text" id="discussionTitle" class="form-control" placeholder="Discussion title..." required>
-                </div>
-                <div class="form-group">
-                  <textarea id="discussionContent" class="form-control" rows="3" placeholder="Describe your question in detail..." required></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary btn-sm">Post Discussion</button>
-              </form>
+          <div id="examActiveZone"></div>
+          <div id="examsList"></div>
+        </div>
+
+        <div id="tabDiscussions" class="tab-content" style="display:none;">
+          <div class="card" style="margin-bottom:1.5rem;">
+            <h4>Ask a Question in this Course</h4>
+            <form onsubmit="postCourseDiscussion(event)">
+              <div class="form-group"><input type="text" id="discTitle" class="form-control" placeholder="Question Title..." required></div>
+              <div class="form-group"><textarea id="discContent" class="form-control" rows="2" placeholder="Details..." required></textarea></div>
+              <button type="submit" class="btn btn-primary btn-sm">Post Question</button>
+            </form>
+          </div>
+          <div id="courseDiscussionsList"></div>
+        </div>
+
+        <div id="tabReviews" class="tab-content" style="display:none;">
+          <div class="card" style="margin-bottom:1.5rem;">
+            <h4>Rate & Review this Course (0.0 to 10.0)</h4>
+            <form onsubmit="postCourseReview(event)">
+              <div style="display:flex; align-items:center; gap:1rem; margin:1rem 0;">
+                <input type="range" id="rateScore" min="0" max="10" step="0.5" value="9" style="flex:1;" oninput="document.getElementById('rateScoreDisplay').textContent = this.value">
+                <strong id="rateScoreDisplay" style="font-size:1.3rem; color:var(--primary);">9.0</strong> / 10.0
+              </div>
+              <div class="form-group"><textarea id="rateReviewText" class="form-control" rows="2" placeholder="Write your honest review..."></textarea></div>
+              <button type="submit" class="btn btn-primary btn-sm">Submit Review</button>
+            </form>
+          </div>
+          <div id="reviewsList"></div>
+        </div>
+
+        <div id="tabStudents" class="tab-content" style="display:none;">
+          <div class="card">
+            <h3>Enrolled Students Roster</h3>
+            <div style="overflow-x:auto; margin-top:1rem;">
+              <table style="width:100%; border-collapse:collapse;" id="studentsRosterTable"></table>
             </div>
-            <div id="discussionsList"></div>
           </div>
         </div>
       </main>

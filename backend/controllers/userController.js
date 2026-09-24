@@ -14,7 +14,7 @@ exports.getMe = async (req, res, next) => {
     const userQuery = `
       SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.bio, u.phone, u.address, u.avatar_url, u.last_active_at, u.created_at,
              sp.institution, sp.semester, sp.student_code,
-             tp.designation, tp.qualification, tp.experience_years
+             tp.designation, tp.qualification, tp.experience_years, COALESCE(tp.qualifications, '[]'::jsonb) AS qualifications
       FROM users u
       LEFT JOIN student_profiles sp ON u.id = sp.user_id
       LEFT JOIN teacher_profiles tp ON u.id = tp.user_id
@@ -42,7 +42,10 @@ exports.getMe = async (req, res, next) => {
 exports.updateProfile = async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { first_name, last_name, bio, phone, address, avatar_url, institution, semester, designation, qualification } = req.body;
+    const { first_name, last_name, bio, phone, address, avatar_url, institution, semester, designation, qualification, qualifications } = req.body;
+    if (bio != null && (typeof bio !== 'string' || bio.length > 2000)) return res.status(400).json({ error: "Bio must be under 2000 characters." });
+    if (avatar_url != null && (typeof avatar_url !== 'string' || avatar_url.length > 6000000 || (!avatar_url.startsWith('data:image/') && !/^https?:\/\//i.test(avatar_url)))) return res.status(400).json({ error: "Profile picture must be a valid image URL or image file." });
+    if (qualifications != null && (!Array.isArray(qualifications) || qualifications.length > 20 || qualifications.some(q => !q || typeof q !== 'object' || typeof q.degree !== 'string' || typeof q.institute !== 'string' || typeof q.experience !== 'string' || typeof q.certifications !== 'string'))) return res.status(400).json({ error: "Qualifications must be an array of degree, institute, experience, and certifications." });
     await client.query("BEGIN");
 
     const userUpdate = await client.query(
@@ -66,8 +69,8 @@ exports.updateProfile = async (req, res, next) => {
       );
     } else if (req.user.role === "teacher") {
       await client.query(
-        `UPDATE teacher_profiles SET designation = COALESCE($1, designation), qualification = COALESCE($2, qualification) WHERE user_id = $3`,
-        [designation, qualification, req.user.id]
+        `UPDATE teacher_profiles SET designation = COALESCE($1, designation), qualification = COALESCE($2, qualification), qualifications = COALESCE($3::jsonb, qualifications) WHERE user_id = $4`,
+        [designation, qualification, qualifications == null ? null : JSON.stringify(qualifications), req.user.id]
       );
     }
 
@@ -99,16 +102,31 @@ exports.searchUser = async (req, res, next) => {
        FROM users u
        LEFT JOIN enrollments e ON u.id = e.user_id AND e.status = 'active'
        LEFT JOIN courses c ON e.course_id = c.id
-       WHERE u.first_name ILIKE $1 OR u.last_name ILIKE $1 OR (u.first_name || ' ' || u.last_name) ILIKE $1 OR u.email ILIKE $1
+      WHERE u.id <> $2 AND (u.first_name ILIKE $1 OR u.last_name ILIKE $1 OR (u.first_name || ' ' || u.last_name) ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1)
        GROUP BY u.id
        LIMIT 10`,
-      [`%${q.trim()}%`]
+      [`%${q.trim()}%`, req.user.id]
     );
 
     return res.status(200).json(users.rows);
   } catch (err) {
     next(err);
   }
+};
+
+exports.getPublicProfile = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid user ID." });
+    const result = await pool.query(`SELECT u.id, u.first_name, u.last_name, u.role, u.bio, u.avatar_url,
+      COALESCE((SELECT json_agg(json_build_object('id', f.id, 'name', f.first_name || ' ' || f.last_name))
+        FROM users f WHERE f.id NOT IN ($1, $2)
+        AND EXISTS (SELECT 1 FROM friendships a WHERE a.status = 'accepted' AND ((a.user_id = $1 AND a.friend_id = f.id) OR (a.friend_id = $1 AND a.user_id = f.id)))
+        AND EXISTS (SELECT 1 FROM friendships b WHERE b.status = 'accepted' AND ((b.user_id = $2 AND b.friend_id = f.id) OR (b.friend_id = $2 AND b.user_id = f.id)))), '[]') AS mutual_connections
+      FROM users u WHERE u.id = $1`, [id, req.user.id]);
+    if (!result.rows.length) return res.status(404).json({ error: "User not found." });
+    res.json(result.rows[0]);
+  } catch (err) { next(err); }
 };
 
 exports.getUserActivity = async (req, res, next) => {

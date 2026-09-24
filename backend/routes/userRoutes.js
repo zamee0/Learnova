@@ -5,5 +5,6 @@ router.get("/me", authMiddleware, c.getMe);
 router.put("/profile", authMiddleware, c.updateProfile);
 router.post("/heartbeat", authMiddleware, c.heartbeat);
 router.get("/search", authMiddleware, c.searchUser);
+router.get("/:id", authMiddleware, c.getPublicProfile);
 router.get("/:id/activity", authMiddleware, c.getUserActivity);
 module.exports = router;

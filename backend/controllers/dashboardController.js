@@ -30,3 +30,19 @@ exports.getStats = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getProfileStats = async (req, res, next) => {
+  try {
+    if (req.user.role === 'teacher') {
+      const result = await pool.query(`SELECT c.id, c.title, COUNT(DISTINCT e.id)::int AS students,
+        COALESCE(ROUND(AVG(r.rating)::numeric,1),0)::float AS rating
+        FROM courses c LEFT JOIN enrollments e ON e.course_id=c.id AND e.status <> 'dropped'
+        LEFT JOIN course_reviews r ON r.course_id=c.id WHERE c.teacher_id=$1 GROUP BY c.id ORDER BY students DESC`, [req.user.id]);
+      return res.json({ role:'teacher', courses:result.rows, metrics:{ courses:result.rowCount, students:result.rows.reduce((n,c)=>n+c.students,0), rating:result.rowCount ? Number((result.rows.reduce((n,c)=>n+c.rating,0)/result.rowCount).toFixed(1)) : 0 } });
+    }
+    const result = await pool.query(`SELECT c.id, c.title, c.category, e.progress_percent::float AS progress, e.status
+      FROM enrollments e JOIN courses c ON c.id=e.course_id WHERE e.user_id=$1 ORDER BY c.title`, [req.user.id]);
+    const completed = result.rows.filter(c=>c.status==='completed').length;
+    return res.json({ role:'student', courses:result.rows, metrics:{ courses:result.rowCount, completed, averageProgress:result.rowCount ? Math.round(result.rows.reduce((n,c)=>n+c.progress,0)/result.rowCount) : 0 } });
+  } catch (err) { next(err); }
+};

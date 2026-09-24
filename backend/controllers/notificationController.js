@@ -19,7 +19,9 @@ exports.getNotifications = async (req, res, next) => {
 exports.markAsRead = async (req, res, next) => {
   try {
     const notifId = parseInt(req.params.id, 10);
-    await pool.query("UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2", [notifId, req.user.id]);
+    if (!Number.isInteger(notifId) || notifId <= 0) return res.status(400).json({ error: "Invalid notification ID." });
+    const result = await pool.query("UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2", [notifId, req.user.id]);
+    if (!result.rowCount) return res.status(404).json({ error: "Notification not found." });
     return res.status(200).json({ message: "Notification marked as read." });
   } catch (err) {
     next(err);

@@ -5,90 +5,56 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const friendsList = document.getElementById("friendsList");
   const requestsList = document.getElementById("requestsList");
-  const sendRequestForm = document.getElementById("sendRequestForm");
 
-  async function loadFriends() {
-    try {
-      const friends = await apiFetch("/friends");
-      if (!friends || friends.length === 0) {
-        friendsList.innerHTML = `<p style="color:var(--gray-500);">You have not added any friends yet.</p>`;
-      } else {
-        friendsList.innerHTML = friends.map(f => `
-          <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-            <div style="display:flex; align-items:center; gap:0.75rem;">
-              <div class="avatar">${getInitials(f.name || f.email)}</div>
-              <div>
-                <strong>${f.name || f.email}</strong>
-                <p style="font-size:0.8rem; color:var(--gray-500);">${f.email || ''}</p>
-              </div>
-            </div>
-            <a href="/messages.html" class="btn btn-outline btn-sm"><i class="fa-solid fa-message"></i> Message</a>
-          </div>
-        `).join("");
-      }
-    } catch (err) {
-      friendsList.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
-    }
+  async function loadData() {
+    const friends = await apiFetch("/friends");
+    const requests = await apiFetch("/friends/requests");
+
+    friendsList.innerHTML = friends.length ? friends.map(f => `
+      <div class="card" style="margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong>${f.name}</strong> ${f.is_online ? '<span style="color:var(--success); font-size:0.8rem;">● Online</span>' : ''}
+          <p style="font-size:0.8rem; color:var(--gray-500);">${f.email}</p>
+        </div>
+        <a href="/messages.html" class="btn btn-outline btn-sm"><i class="fa-solid fa-paper-plane"></i> Message</a>
+      </div>
+    `).join("") : "<p style='color:var(--gray-500);'>No friends added yet.</p>";
+
+    requestsList.innerHTML = requests.length ? requests.map(r => `
+      <div class="card" style="margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong>${r.sender_name}</strong>
+          <p style="font-size:0.8rem; color:var(--gray-500);">${r.sender_email}</p>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="btn btn-primary btn-sm" onclick="respondReq(${r.id}, 'accepted')">Accept</button>
+          <button class="btn btn-outline btn-sm btn-danger" onclick="respondReq(${r.id}, 'rejected')">Reject</button>
+        </div>
+      </div>
+    `).join("") : "<p style='color:var(--gray-500);'>No pending requests.</p>";
   }
 
-  async function loadRequests() {
-    try {
-      const requests = await apiFetch("/friends/requests");
-      if (!requests || requests.length === 0) {
-        requestsList.innerHTML = `<p style="color:var(--gray-500);">No pending friend requests.</p>`;
-      } else {
-        requestsList.innerHTML = requests.map(r => `
-          <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-            <div style="display:flex; align-items:center; gap:0.75rem;">
-              <div class="avatar">${getInitials(r.sender_name || 'U')}</div>
-              <div>
-                <strong>${r.sender_name || 'Learner'}</strong>
-                <p style="font-size:0.8rem; color:var(--gray-500);">Sent you a request</p>
-              </div>
-            </div>
-            <div style="display:flex; gap:0.5rem;">
-              <button class="btn btn-primary btn-sm" onclick="respondRequest(${r.id}, 'accepted')">Accept</button>
-              <button class="btn btn-outline btn-sm btn-danger" onclick="respondRequest(${r.id}, 'rejected')">Reject</button>
-            </div>
-          </div>
-        `).join("");
-      }
-    } catch (err) {
-      requestsList.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
-    }
-  }
-
-  window.respondRequest = async function(requestId, status) {
-    try {
-      await apiFetch(`/friends/request/${requestId}`, {
-        method: "PUT",
-        body: JSON.stringify({ status })
-      });
-      loadRequests();
-      loadFriends();
-    } catch (err) {
-      alert(err.message);
-    }
+  window.respondReq = async function(reqId, status) {
+    await apiFetch(`/friends/request/${reqId}`, { method: "PUT", body: JSON.stringify({ status }) });
+    loadData();
   };
 
-  sendRequestForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const receiverId = document.getElementById("receiverIdInput").value.trim();
-    if (!receiverId) return;
-
-    try {
-      await apiFetch("/friends/request", {
-        method: "POST",
-        body: JSON.stringify({ receiver_id: receiverId })
-      });
-      alert("Friend request sent!");
-      sendRequestForm.reset();
-      loadRequests();
-    } catch (err) {
-      alert(err.message);
-    }
-  });
-
-  loadFriends();
-  loadRequests();
+  loadData();
 });
+
+let communityTimer;
+function searchCommunity(q) {
+  clearTimeout(communityTimer);
+  communityTimer = setTimeout(async () => {
+    const box = document.getElementById('communityResults');
+    if (!q.trim()) { box.innerHTML = ''; return; }
+    try {
+      const users = await apiFetch(`/users/search?q=${encodeURIComponent(q)}`);
+      box.innerHTML = users.map(u => `<article class="card" style="padding:.75rem;margin:.5rem 0"><a href="/community.html?id=${u.id}"><strong>${escapeHtml(u.name)}</strong></a><div>${escapeHtml(u.role)} · ${u.is_online ? 'Online' : 'Offline'}</div><button class="btn btn-primary btn-sm" onclick="addCommunityFriend(${u.id})">Add Friend</button></article>`).join('') || '<p>No matching people.</p>';
+    } catch (err) { box.textContent = err.message; }
+  }, 250);
+}
+async function addCommunityFriend(id) {
+  try { await apiFetch('/friends/request', { method: 'POST', body: JSON.stringify({ receiver_id: id }) }); searchCommunity(document.getElementById('communitySearch').value); }
+  catch (err) { alert(err.message); }
+}
