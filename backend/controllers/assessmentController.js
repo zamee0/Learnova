@@ -34,14 +34,13 @@ exports.createAssignment = async (req, res, next) => {
     if (!owner.rowCount) return res.status(404).json({ error: "Course not found." });
     if (owner.rows[0].teacher_id !== req.user.id) return res.status(403).json({ error: "Only the course teacher can publish assignments." });
     await client.query('BEGIN');
-    const published = [];
-    for (const a of batch) {
-      const row = await client.query(`INSERT INTO assignments (course_id, teacher_id, title, description, instructions, total_marks, deadline, attachments)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING id,title,deadline,total_marks`, [courseId, req.user.id, a.title.trim(), a.description || null, a.instructions || null, Number(a.total_marks ?? 100), a.deadline, JSON.stringify(a.attachments || [])]);
-      published.push(row.rows[0]);
-    }
+    const call = await client.query(
+      "CALL publish_course_assignments($1, $2, $3::jsonb, '[]'::jsonb)",
+      [courseId, req.user.id, JSON.stringify(batch.map(a => ({ ...a, title: a.title.trim(), total_marks: Number(a.total_marks ?? 100), attachments: a.attachments || [] })))]
+    );
+    const published = call.rows[0]?.p_created || [];
     await client.query('COMMIT');
-    return res.status(201).json({ message: `${published.length} assignment(s) published`, assignments: published });
+      return res.status(201).json({ message: `${published.length} assignment(s) published`, assignments: published });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -249,7 +248,9 @@ exports.submitExam = async (req, res, next) => {
     if (!attempt) return res.status(400).json({ error: "No active exam session found." });
     if (attempt.status !== 'in_progress') return res.status(409).json({ error: "This exam attempt is already submitted." });
     if (attempt.expired) {
+      await client.query("BEGIN");
       await client.query("UPDATE exam_attempts SET status='submitted',submitted_at=CURRENT_TIMESTAMP,marks=0 WHERE id=$1", [attempt.id]);
+      await client.query("COMMIT");
       return res.status(409).json({ error: "Time expired. The exam has been submitted." });
     }
 

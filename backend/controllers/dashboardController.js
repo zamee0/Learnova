@@ -38,7 +38,8 @@ exports.getProfileStats = async (req, res, next) => {
         COALESCE(ROUND(AVG(r.rating)::numeric,1),0)::float AS rating
         FROM courses c LEFT JOIN enrollments e ON e.course_id=c.id AND e.status <> 'dropped'
         LEFT JOIN course_reviews r ON r.course_id=c.id WHERE c.teacher_id=$1 GROUP BY c.id ORDER BY students DESC`, [req.user.id]);
-      return res.json({ role:'teacher', courses:result.rows, metrics:{ courses:result.rowCount, students:result.rows.reduce((n,c)=>n+c.students,0), rating:result.rowCount ? Number((result.rows.reduce((n,c)=>n+c.rating,0)/result.rowCount).toFixed(1)) : 0 } });
+      const metrics = await pool.query("SELECT * FROM teacher_course_metrics($1)", [req.user.id]);
+      return res.json({ role:'teacher', courses:result.rows, metrics:{ courses:Number(metrics.rows[0].course_count), students:Number(metrics.rows[0].enrolled_students), rating:Number(metrics.rows[0].average_rating) } });
     }
     const result = await pool.query(`SELECT c.id, c.title, c.category, e.progress_percent::float AS progress, e.status
       FROM enrollments e JOIN courses c ON c.id=e.course_id WHERE e.user_id=$1 ORDER BY c.title`, [req.user.id]);

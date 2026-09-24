@@ -94,18 +94,18 @@ exports.createCourse = async (req, res, next) => {
       return res.status(400).json({ error: "Title, description, and category are required." });
     }
 
-    const result = await pool.query(
-      `INSERT INTO courses (teacher_id, title, description, category, level, thumbnail_url, is_published)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [req.user.id, title.trim(), description.trim(), category.trim(), level || 'Beginner', thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800', Boolean(is_published)]
-    );
-
-    await pool.query(
-      `INSERT INTO activity_log (user_id, activity_type, description, course_id)
-       VALUES ($1, 'course_created', $2, $3)`,
-      [req.user.id, `Created new course: ${title}`, result.rows[0].id]
-    );
+    const result = await pool.withTransaction(async client => {
+      const course = await client.query(
+        `INSERT INTO courses (teacher_id, title, description, category, level, thumbnail_url, is_published)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [req.user.id, title.trim(), description.trim(), category.trim(), level || 'Beginner', thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800', Boolean(is_published)]
+      );
+      await client.query(
+        `INSERT INTO activity_log (user_id, activity_type, description, course_id) VALUES ($1, 'course_created', $2, $3)`,
+        [req.user.id, `Created new course: ${title}`, course.rows[0].id]
+      );
+      return course;
+    });
 
     return res.status(201).json({ message: result.rows[0].is_published ? "Course published successfully" : "Draft saved successfully", course: result.rows[0] });
   } catch (err) {

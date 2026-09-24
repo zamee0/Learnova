@@ -56,12 +56,17 @@ exports.sendRequest = async (req, res, next) => {
       `SELECT status FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
       [req.user.id, friendId]
     );
-    if (existing.rows[0]?.status === 'rejected') {
-      await pool.query("UPDATE friendships SET user_id = $1, friend_id = $2, status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)", [req.user.id, friendId]);
-    } else if (existing.rows.length > 0) {
+    if (existing.rows[0]?.status !== 'rejected' && existing.rows.length > 0) {
       return res.status(409).json({ error: `A relationship or request already exists (${existing.rows[0].status}).` });
-    } else await pool.query("INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending')", [req.user.id, friendId]);
-    await pool.query("INSERT INTO notifications (user_id, title, message, type) VALUES ($1, 'New Friend Request', 'Someone sent you a friend request.', 'friend_request')", [friendId]);
+    }
+    await pool.withTransaction(async client => {
+      if (existing.rows[0]?.status === 'rejected') {
+        await client.query("UPDATE friendships SET user_id = $1, friend_id = $2, status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)", [req.user.id, friendId]);
+      } else {
+        await client.query("INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending')", [req.user.id, friendId]);
+      }
+      await client.query("INSERT INTO notifications (user_id, title, message, type) VALUES ($1, 'New Friend Request', 'Someone sent you a friend request.', 'friend_request')", [friendId]);
+    });
 
     return res.status(201).json({ message: "Friend request sent successfully." });
   } catch (err) {
@@ -99,14 +104,15 @@ exports.respondRequest = async (req, res, next) => {
     const reqRecord = await pool.query("SELECT user_id, friend_id FROM friendships WHERE id = $1 AND friend_id = $2", [requestId, req.user.id]);
     if (reqRecord.rows.length === 0) return res.status(404).json({ error: "Friend request not found or unauthorized." });
 
-    await pool.query("UPDATE friendships SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [newStatus, requestId]);
-
-    if (newStatus === "accepted") {
-      await pool.query(
+    await pool.withTransaction(async client => {
+      await client.query("UPDATE friendships SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [newStatus, requestId]);
+      if (newStatus === "accepted") {
+        await client.query(
         "INSERT INTO notifications (user_id, title, message, type) VALUES ($1, 'Friend Request Accepted', 'Your friend request was accepted.', 'friend_accept')",
         [reqRecord.rows[0].user_id]
-      );
-    }
+        );
+      }
+    });
 
     return res.status(200).json({ message: `Friend request ${newStatus}.` });
   } catch (err) {

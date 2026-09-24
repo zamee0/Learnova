@@ -56,18 +56,17 @@ exports.createAnnouncement = async (req, res, next) => {
     }
 
     const courseTitle = courseCheck.rows[0].title;
-    const result = await pool.query(
-      `INSERT INTO announcements (course_id, teacher_id, title, content)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [courseId, teacherId, title.trim(), content.trim()]
-    );
-
-    await pool.query(
-      `INSERT INTO notifications (user_id, title, message, type)
-       SELECT user_id, $1, $2, 'announcement'
-       FROM enrollments WHERE course_id = $3`,
-      [`New Announcement: ${courseTitle}`, title.trim(), courseId]
-    );
+    const result = await pool.withTransaction(async client => {
+      const announcement = await client.query(
+        `INSERT INTO announcements (course_id, teacher_id, title, content) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [courseId, teacherId, title.trim(), content.trim()]
+      );
+      await client.query(
+        `INSERT INTO notifications (user_id, title, message, type) SELECT user_id, $1, $2, 'announcement' FROM enrollments WHERE course_id = $3`,
+        [`New Announcement: ${courseTitle}`, title.trim(), courseId]
+      );
+      return announcement;
+    });
 
     return res.status(201).json({ message: "Announcement posted successfully", announcement: result.rows[0] });
   } catch (err) {

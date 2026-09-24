@@ -46,32 +46,16 @@ exports.enroll = async (req, res, next) => {
       return res.status(400).json({ error: "You are already enrolled in this course." });
     }
 
-    const result = await pool.query(
-      `INSERT INTO enrollments (user_id, course_id, status, progress_percent) 
-       VALUES ($1, $2, 'active', 0) RETURNING *`,
-      [studentId, courseId]
-    );
-
-    // Create student notification
-    await pool.query(
-      `INSERT INTO notifications (user_id, title, message, type) 
-       VALUES ($1, 'Course Enrolled Successfully', $2, 'enrollment')`,
-      [studentId, `You have successfully joined "${title}". Start learning now!`]
-    );
-
-    // Create instructor notification
-    await pool.query(
-      `INSERT INTO notifications (user_id, title, message, type) 
-       VALUES ($1, 'New Student Enrolled', $2, 'enrollment')`,
-      [teacher_id, `${student_name} just enrolled in "${title}".`]
-    );
-
-    // Audit log
-    await pool.query(
-      `INSERT INTO activity_log (user_id, activity_type, description, course_id) 
-       VALUES ($1, 'course_enrollment', $2, $3)`,
-      [studentId, `Enrolled in course: ${title}`, courseId]
-    );
+    const result = await pool.withTransaction(async client => {
+      const enrollment = await client.query(
+        `INSERT INTO enrollments (user_id, course_id, status, progress_percent) VALUES ($1, $2, 'active', 0) RETURNING *`,
+        [studentId, courseId]
+      );
+      await client.query(`INSERT INTO notifications (user_id, title, message, type) VALUES ($1, 'Course Enrolled Successfully', $2, 'enrollment')`, [studentId, `You have successfully joined "${title}". Start learning now!`]);
+      await client.query(`INSERT INTO notifications (user_id, title, message, type) VALUES ($1, 'New Student Enrolled', $2, 'enrollment')`, [teacher_id, `${student_name} just enrolled in "${title}".`]);
+      await client.query(`INSERT INTO activity_log (user_id, activity_type, description, course_id) VALUES ($1, 'course_enrollment', $2, $3)`, [studentId, `Enrolled in course: ${title}`, courseId]);
+      return enrollment;
+    });
 
     return res.status(201).json({ 
       message: "Successfully enrolled in course!", 
