@@ -1,4 +1,12 @@
 const pool = require("../config/db");
+const { validImageDataUrl } = require("../utils/imageValidation");
+const DEFAULT_BANNER = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800";
+
+function validCourseImage(value) {
+  if (typeof value !== 'string' || value.length > 6 * 1024 * 1024) return false;
+  if (value.startsWith('data:')) return validImageDataUrl(value);
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
 
 exports.getAllCourses = async (req, res, next) => {
   try {
@@ -90,7 +98,7 @@ exports.getCourseById = async (req, res, next) => {
 exports.createCourse = async (req, res, next) => {
   try {
     const { title, description, category, level, thumbnail_url, is_published = true } = req.body;
-    if (![title, description, category].every(v => typeof v === 'string' && v.trim()) || (level && !['Beginner', 'Intermediate', 'Advanced', 'All Levels'].includes(level)) || (typeof is_published !== 'boolean')) {
+    if (![title, description, category].every(v => typeof v === 'string' && v.trim()) || (level && !['Beginner', 'Intermediate', 'Advanced', 'All Levels'].includes(level)) || (typeof is_published !== 'boolean') || (thumbnail_url && !validCourseImage(thumbnail_url))) {
       return res.status(400).json({ error: "Title, description, and category are required." });
     }
 
@@ -117,7 +125,7 @@ exports.updateCourse = async (req, res, next) => {
   try {
     const courseId = parseInt(req.params.id, 10);
     const { title, description, category, level, thumbnail_url, is_published } = req.body;
-    if ((title != null && (typeof title !== 'string' || !title.trim())) || (description != null && (typeof description !== 'string' || !description.trim())) || (category != null && (typeof category !== 'string' || !category.trim())) || (level != null && !['Beginner', 'Intermediate', 'Advanced', 'All Levels'].includes(level)) || (is_published != null && typeof is_published !== 'boolean')) return res.status(400).json({ error: "Invalid course fields." });
+    if ((title != null && (typeof title !== 'string' || !title.trim())) || (description != null && (typeof description !== 'string' || !description.trim())) || (category != null && (typeof category !== 'string' || !category.trim())) || (level != null && !['Beginner', 'Intermediate', 'Advanced', 'All Levels'].includes(level)) || (is_published != null && typeof is_published !== 'boolean') || (thumbnail_url && !validCourseImage(thumbnail_url))) return res.status(400).json({ error: "Invalid course fields or banner image." });
 
     const owner = await pool.query("SELECT teacher_id FROM courses WHERE id = $1", [courseId]);
     if (owner.rows.length === 0) return res.status(404).json({ error: "Course not found." });
@@ -149,7 +157,6 @@ exports.updateCourse = async (req, res, next) => {
 exports.deleteCourseBanner = async (req, res, next) => {
   try {
     const courseId = parseInt(req.params.id, 10);
-    const defaultBanner = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800";
 
     const owner = await pool.query("SELECT teacher_id FROM courses WHERE id = $1", [courseId]);
     if (owner.rows.length === 0) return res.status(404).json({ error: "Course not found." });
@@ -157,8 +164,8 @@ exports.deleteCourseBanner = async (req, res, next) => {
       return res.status(403).json({ error: "Unauthorized." });
     }
 
-    await pool.query("UPDATE courses SET thumbnail_url = $1 WHERE id = $2", [defaultBanner, courseId]);
-    return res.status(200).json({ message: "Course banner reset to default.", thumbnail_url: defaultBanner });
+    await pool.query("UPDATE courses SET thumbnail_url = $1 WHERE id = $2", [DEFAULT_BANNER, courseId]);
+    return res.status(200).json({ message: "Course banner reset to default.", thumbnail_url: DEFAULT_BANNER });
   } catch (err) {
     next(err);
   }
@@ -175,14 +182,16 @@ exports.getEnrolledStudents = async (req, res, next) => {
 
     const students = await pool.query(
       `SELECT u.id AS user_id, u.first_name || ' ' || u.last_name AS name, u.email, u.avatar_url,
-              e.id AS enrollment_id, e.status, e.progress_percent, e.enrolled_at,
+              e.id AS enrollment_id, CASE WHEN b.user_id IS NOT NULL THEN 'banned' ELSE e.status END AS status,
+              COALESCE(e.progress_percent, 0) AS progress_percent, e.enrolled_at,
               sp.institution, sp.semester,
               (CURRENT_TIMESTAMP - u.last_active_at < INTERVAL '5 minutes') AS is_online
-       FROM enrollments e
-       JOIN users u ON e.user_id = u.id
+       FROM users u
+       LEFT JOIN enrollments e ON e.user_id = u.id AND e.course_id = $1
+       LEFT JOIN course_bans b ON b.user_id = u.id AND b.course_id = $1
        LEFT JOIN student_profiles sp ON u.id = sp.user_id
-       WHERE e.course_id = $1
-       ORDER BY e.enrolled_at DESC`,
+       WHERE (e.id IS NOT NULL OR b.user_id IS NOT NULL) AND u.role = 'student'
+       ORDER BY e.enrolled_at DESC NULLS LAST, u.last_name, u.first_name`,
       [courseId]
     );
 
@@ -198,6 +207,9 @@ exports.banOrRemoveStudent = async (req, res, next) => {
     const courseId = parseInt(req.params.id, 10);
     const targetStudentId = parseInt(req.params.studentId, 10);
     const { action, reason } = req.body;
+    if (!Number.isInteger(courseId) || courseId <= 0 || !Number.isInteger(targetStudentId) || targetStudentId <= 0 || !['ban', 'remove', 'unban'].includes(action) || (reason != null && (typeof reason !== 'string' || reason.length > 500))) {
+      return res.status(400).json({ error: "Choose ban, remove, or unban and provide valid student/course details." });
+    }
 
     const owner = await client.query("SELECT teacher_id, title FROM courses WHERE id = $1", [courseId]);
     if (owner.rows.length === 0) return res.status(404).json({ error: "Course not found." });
@@ -205,10 +217,19 @@ exports.banOrRemoveStudent = async (req, res, next) => {
       return res.status(403).json({ error: "Unauthorized." });
     }
 
-    await client.query("BEGIN");
-    await client.query("DELETE FROM enrollments WHERE course_id = $1 AND user_id = $2", [courseId, targetStudentId]);
+    const student = await client.query("SELECT role FROM users WHERE id = $1", [targetStudentId]);
+    if (!student.rowCount || student.rows[0].role !== 'student') return res.status(404).json({ error: "Student not found." });
+    const relation = await client.query(
+      `SELECT EXISTS(SELECT 1 FROM enrollments WHERE course_id=$1 AND user_id=$2) AS enrolled,
+              EXISTS(SELECT 1 FROM course_bans WHERE course_id=$1 AND user_id=$2) AS banned`,
+      [courseId, targetStudentId]
+    );
+    const { enrolled, banned } = relation.rows[0];
+    if (action === 'unban' ? !banned : !enrolled) return res.status(404).json({ error: action === 'unban' ? "Course ban not found." : "Student is not enrolled in this course." });
 
+    await client.query("BEGIN");
     if (action === "ban") {
+      await client.query("DELETE FROM enrollments WHERE course_id = $1 AND user_id = $2", [courseId, targetStudentId]);
       await client.query(
         `INSERT INTO course_bans (course_id, user_id, banned_by, reason)
          VALUES ($1, $2, $3, $4)
@@ -221,16 +242,24 @@ exports.banOrRemoveStudent = async (req, res, next) => {
          VALUES ($1, 'Course Ban Notice', $2, 'general')`,
         [targetStudentId, `You have been banned from "${owner.rows[0].title}". Reason: ${reason || 'Instructor policy violation.'}`]
       );
-    } else {
+    } else if (action === "remove") {
+      await client.query("DELETE FROM enrollments WHERE course_id = $1 AND user_id = $2", [courseId, targetStudentId]);
       await client.query(
         `INSERT INTO notifications (user_id, title, message, type)
          VALUES ($1, 'Course Enrollment Update', $2, 'general')`,
         [targetStudentId, `Your enrollment in "${owner.rows[0].title}" was removed by the instructor.`]
       );
+    } else {
+      await client.query("DELETE FROM course_bans WHERE course_id = $1 AND user_id = $2", [courseId, targetStudentId]);
+      await client.query(
+        `INSERT INTO notifications (user_id, title, message, type)
+         VALUES ($1, 'Course Ban Lifted', $2, 'general')`,
+        [targetStudentId, `Your ban from "${owner.rows[0].title}" was lifted. You may enroll again.`]
+      );
     }
 
     await client.query("COMMIT");
-    return res.status(200).json({ message: `Student ${action === 'ban' ? 'banned' : 'removed'} successfully.` });
+    return res.status(200).json({ message: action === 'unban' ? "Student unbanned successfully." : `Student ${action === 'ban' ? 'banned' : 'removed'} successfully.` });
   } catch (err) {
     await client.query("ROLLBACK");
     next(err);

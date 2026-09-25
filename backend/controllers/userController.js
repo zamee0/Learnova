@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { validImageDataUrl } = require("../utils/imageValidation");
 
 exports.heartbeat = async (req, res, next) => {
   try {
@@ -44,8 +45,13 @@ exports.updateProfile = async (req, res, next) => {
   try {
     const { first_name, last_name, bio, phone, address, avatar_url, institution, semester, designation, qualification, qualifications } = req.body;
     if (bio != null && (typeof bio !== 'string' || bio.length > 2000)) return res.status(400).json({ error: "Bio must be under 2000 characters." });
-    if (avatar_url != null && (typeof avatar_url !== 'string' || avatar_url.length > 6000000 || (!avatar_url.startsWith('data:image/') && !/^https?:\/\//i.test(avatar_url)))) return res.status(400).json({ error: "Profile picture must be a valid image URL or image file." });
-    if (qualifications != null && (!Array.isArray(qualifications) || qualifications.length > 20 || qualifications.some(q => !q || typeof q !== 'object' || typeof q.degree !== 'string' || typeof q.institute !== 'string' || typeof q.experience !== 'string' || typeof q.certifications !== 'string'))) return res.status(400).json({ error: "Qualifications must be an array of degree, institute, experience, and certifications." });
+    let validAvatar = false;
+    if (typeof avatar_url === 'string' && avatar_url.length <= 6000000) {
+      if (avatar_url.startsWith('data:')) validAvatar = validImageDataUrl(avatar_url);
+      else try { validAvatar = ['http:', 'https:'].includes(new URL(avatar_url).protocol); } catch { /* Invalid image URL. */ }
+    }
+    if (avatar_url != null && !validAvatar) return res.status(400).json({ error: "Profile picture must be a valid JPEG, PNG, WebP image, or HTTP image URL." });
+    if (qualifications != null && (!Array.isArray(qualifications) || qualifications.length > 20 || (req.user.role === 'teacher' && !qualifications.length) || qualifications.some(q => !q || typeof q !== 'object' || ['degree', 'institute', 'experience', 'certifications'].some(key => typeof q[key] !== 'string' || q[key].length > 250) || ['degree', 'institute', 'experience'].some(key => !q[key].trim())))) return res.status(400).json({ error: "Add up to 20 qualifications; each needs a degree, institute, and experience." });
     await client.query("BEGIN");
 
     const userUpdate = await client.query(
