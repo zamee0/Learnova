@@ -6,6 +6,15 @@ async function readUpload(file, maxBytes = 5 * 1024 * 1024) {
   const data = await new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error('Could not read the selected file.')); reader.readAsDataURL(file); });
   return { name:file.name, type:file.type, data };
 }
+async function readImageUpload(file, maxBytes = 4 * 1024 * 1024) {
+  if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > maxBytes) throw new Error('Choose a JPEG, PNG, or WebP image under 4 MB.');
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 async function apiFetch(endpoint, options = {}) {
   const token = localStorage.getItem("token");

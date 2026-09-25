@@ -7,6 +7,17 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/dashboard.css">
+  <style>
+    .profile-layout { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr); gap:1.5rem; }
+    .profile-hero { display:flex; gap:1.2rem; align-items:center; padding:1rem; border-radius:var(--radius); background:linear-gradient(135deg,var(--primary-light),#fff); }
+    .profile-hero img { width:96px; height:96px; flex:none; object-fit:cover; border-radius:50%; border:3px solid #fff; box-shadow:var(--shadow); }
+    .image-drop-zone { display:flex; align-items:center; justify-content:center; gap:.65rem; flex-wrap:wrap; padding:1rem; border:2px dashed var(--gray-300); border-radius:var(--radius); color:var(--gray-700); background:var(--gray-50); text-align:center; cursor:pointer; }
+    .image-drop-zone.drag-active { border-color:var(--primary); background:var(--primary-light); }
+    .image-drop-zone small { flex-basis:100%; color:var(--gray-500); }
+    .qualification-row { border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:.75rem 0; background:var(--gray-50); }
+    @media(max-width:900px) { .profile-layout { grid-template-columns:1fr !important; } }
+    @media(max-width:600px) { .profile-hero { align-items:flex-start; flex-direction:column; } }
+  </style>
 </head>
 <body>
   <div class="app-container">
@@ -21,7 +32,7 @@
         <h1 class="topbar-title">Profile & Network Search</h1>
       </header>
 
-      <main class="content-body" style="display:grid; grid-template-columns:1.2fr 1fr; gap:2rem;">
+      <main class="content-body profile-layout">
         <div>
           <div class="card" id="myProfileCard" style="margin-bottom:2rem;"></div>
           <div class="card" id="profileInsights" style="margin-bottom:2rem;"><h3>Learning & Teaching Insights</h3><div id="profileChart" style="margin-top:1rem"></div></div>
@@ -33,7 +44,7 @@
                 <div class="form-group"><label class="form-label">First Name</label><input type="text" id="profFirst" class="form-control" required></div>
                 <div class="form-group"><label class="form-label">Last Name</label><input type="text" id="profLast" class="form-control" required></div>
               </div>
-              <div class="form-group"><label class="form-label">Profile Picture</label><input type="url" id="profAvatar" class="form-control" placeholder="Image URL (optional)"><input type="file" id="profAvatarFile" class="form-control" accept="image/jpeg,image/png,image/webp" style="margin-top:.5rem"><div id="avatarDrop" tabindex="0" style="padding:1rem;border:1px dashed var(--primary);margin-top:.5rem">Drop an image here or choose a file above (max 4 MB)</div><img id="avatarPreview" alt="Profile picture preview" style="display:none;width:100px;height:100px;object-fit:cover;border-radius:50%;margin-top:.5rem"></div>
+              <div class="form-group"><label class="form-label" for="profAvatar">Profile Picture</label><input type="text" id="profAvatar" class="form-control" placeholder="Or paste an image URL"><input type="file" id="profAvatarFile" class="form-control" accept="image/jpeg,image/png,image/webp" style="margin-top:.5rem"><div id="avatarDrop" class="image-drop-zone" tabindex="0" role="button" aria-label="Choose or drop a profile image" style="margin-top:.5rem"><i class="fa-solid fa-cloud-arrow-up"></i><strong>Drop your image here</strong><span>or browse from your device</span><small>JPEG, PNG, or WebP up to 4 MB. Images are cropped to a square preview.</small></div><img id="avatarPreview" alt="Profile picture preview" style="display:none;width:100px;height:100px;object-fit:cover;border-radius:50%;margin-top:.75rem"></div>
               <div class="form-group"><label class="form-label">Bio</label><textarea id="profBio" class="form-control" rows="3"></textarea></div>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
                 <div class="form-group"><label class="form-label">Phone</label><input type="text" id="profPhone" class="form-control"></div>
@@ -51,12 +62,12 @@
               <div id="teacherEditFields" style="display:none;">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
                   <div class="form-group"><label class="form-label">Designation</label><input type="text" id="profDesignation" class="form-control"></div>
-                  <div class="form-group"><label class="form-label">Qualification</label><input type="text" id="profQualification" class="form-control"></div>
                 </div>
-                <div class="form-group"><label class="form-label">Qualifications (JSON array)</label><textarea id="profQualifications" class="form-control" rows="5" placeholder='[{"degree":"...","institute":"...","experience":"...","certifications":"..."}]'></textarea></div>
+                <div class="form-group"><label class="form-label">Qualifications</label><p style="color:var(--gray-500);font-size:.85rem;margin:.25rem 0 .75rem">Add each degree or certification as a separate entry.</p><div id="qualificationRows"></div><button type="button" class="btn btn-outline btn-sm" onclick="addQualificationRow()"><i class="fa-solid fa-plus"></i> Add qualification</button></div>
               </div>
 
-              <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+              <button type="submit" class="btn btn-primary btn-sm" id="saveProfileButton">Save Changes</button>
+              <span id="profileSaveStatus" role="status" aria-live="polite" style="margin-left:.75rem;color:var(--gray-500)"></span>
             </form>
           </div>
         </div>

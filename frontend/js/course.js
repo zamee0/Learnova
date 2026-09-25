@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   ['exStart','exEnd','liveStartTime'].forEach(id => { const input=document.getElementById(id); if(input) input.min=minDate; });
   document.getElementById('exStart')?.addEventListener('change', e => { document.getElementById('exEnd').min=e.target.value; });
   wireFileDrop('noteDrop','noteFile');
+  wireBannerUpload();
 });
 
 async function loadCourseData() {
@@ -49,7 +50,7 @@ async function loadCourseData() {
       btnZone.innerHTML = `
         <button class="btn btn-outline btn-sm" onclick="editCourse()"><i class="fa-solid fa-pen"></i> Edit Course</button>
         ${!currentCourseData.is_published ? '<button class="btn btn-primary btn-sm" onclick="publishCourse()">Publish Draft</button>' : ''}
-        <button class="btn btn-outline btn-sm" onclick="promptBannerUpdate()"><i class="fa-solid fa-image"></i> Update Banner</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleBannerUploader()"><i class="fa-solid fa-image"></i> Update Banner</button>
         <button class="btn btn-outline btn-sm btn-danger" onclick="deleteBanner()"><i class="fa-solid fa-trash"></i> Reset Banner</button>
       `;
     } else if (currentUser.role === 'student') {
@@ -114,17 +115,56 @@ function switchTab(tab) {
   if (el) el.style.display = "block";
 }
 
-async function promptBannerUpdate() {
-  const url = prompt("Enter new Image Banner URL:", currentCourseData.thumbnail_url);
-  if (!url) return;
-  await apiFetch(`/courses/${currentCourseId}`, { method: "PUT", body: JSON.stringify({ thumbnail_url: url }) });
-  loadCourseData();
+function toggleBannerUploader(show = true) {
+  const tools = document.getElementById('courseBannerTools');
+  tools.style.display = show ? 'block' : 'none';
+  if (!show) {
+    document.getElementById('courseBannerFile').value = '';
+    document.getElementById('saveCourseBannerBtn').disabled = true;
+    document.getElementById('courseBanner').src = currentCourseData?.thumbnail_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800';
+  }
+}
+
+function wireBannerUpload() {
+  const input = document.getElementById('courseBannerFile');
+  const drop = document.getElementById('courseBannerDrop');
+  const preview = async file => {
+    if (!file) return;
+    try {
+      const data = await readImageUpload(file);
+      document.getElementById('courseBanner').src = data;
+      document.getElementById('saveCourseBannerBtn').disabled = false;
+    } catch (err) { alert(err.message); }
+  };
+  input?.addEventListener('change', e => preview(e.target.files[0]));
+  drop?.addEventListener('click', e => { if (e.target === drop || e.target.closest('strong, span, i')) input.click(); });
+  drop?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+  drop?.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-active'); });
+  drop?.addEventListener('dragleave', () => drop.classList.remove('drag-active'));
+  drop?.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-active'); preview(e.dataTransfer.files[0]); });
+}
+
+async function saveCourseBanner() {
+  const button = document.getElementById('saveCourseBannerBtn');
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    const thumbnail_url = document.getElementById('courseBanner').src;
+    await apiFetch(`/courses/${currentCourseId}`, { method: 'PUT', body: JSON.stringify({ thumbnail_url }) });
+    await loadCourseData();
+    toggleBannerUploader(false);
+  } catch (err) {
+    button.disabled = false;
+    alert(err.message);
+  }
 }
 
 async function deleteBanner() {
   if (!confirm("Reset banner to default image?")) return;
-  await apiFetch(`/courses/${currentCourseId}/banner`, { method: "DELETE" });
-  loadCourseData();
+  try {
+    await apiFetch(`/courses/${currentCourseId}/banner`, { method: "DELETE" });
+    await loadCourseData();
+  } catch (err) { alert(err.message); }
 }
 
 async function enrollCourse() {
@@ -482,9 +522,10 @@ async function postCourseReview(e) {
 
 // Teacher Enrolled Students Moderation (Ban / Remove)
 async function loadEnrolledStudents() {
-  const students = await apiFetch(`/courses/${currentCourseId}/students`);
-  const t = document.getElementById("studentsRosterTable");
-  t.innerHTML = `
+  try {
+    const students = await apiFetch(`/courses/${currentCourseId}/students`);
+    const t = document.getElementById("studentsRosterTable");
+    t.innerHTML = `
     <tr style="text-align:left; border-bottom:2px solid var(--border);">
       <th style="padding:0.75rem;">Student</th>
       <th style="padding:0.75rem;">Email</th>
@@ -494,23 +535,28 @@ async function loadEnrolledStudents() {
     </tr>
     ${students.map(s => `
       <tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:0.75rem;"><img src="${s.avatar_url || 'https://i.pravatar.cc/80'}" alt="" style="width:28px;height:28px;border-radius:50%;vertical-align:middle"> ${s.name} <span style="color:${s.is_online ? 'var(--success)' : 'var(--gray-500)'}; font-size:0.8rem;">● ${s.is_online ? 'Online' : 'Offline'}</span></td>
-        <td style="padding:0.75rem;">${s.email}</td>
-        <td style="padding:0.75rem;">${s.progress_percent}%</td>
-        <td style="padding:0.75rem;"><span class="badge ${s.status === 'completed' ? 'badge-success' : 'badge-primary'}">${s.status}</span></td>
+        <td style="padding:0.75rem;"><img src="${escapeHtml(s.avatar_url || '/images/default-avatar.svg')}" alt="" style="width:28px;height:28px;border-radius:50%;vertical-align:middle"> ${escapeHtml(s.name)} <span style="color:${s.is_online ? 'var(--success)' : 'var(--gray-500)'}; font-size:0.8rem;">${s.is_online ? 'Online' : 'Offline'}</span></td>
+        <td style="padding:0.75rem;">${escapeHtml(s.email)}</td>
+        <td style="padding:0.75rem;">${Number(s.progress_percent) || 0}%</td>
+        <td style="padding:0.75rem;"><span class="badge ${s.status === 'completed' ? 'badge-success' : s.status === 'banned' ? 'badge-danger' : 'badge-primary'}">${escapeHtml(s.status || 'active')}</span></td>
         <td style="padding:0.75rem;">
-          <button class="btn btn-outline btn-sm" onclick="moderateStudent(${s.user_id}, 'remove')">Remove</button>
-          <button class="btn btn-outline btn-sm btn-danger" onclick="moderateStudent(${s.user_id}, 'ban')">Ban</button>
+          ${s.status === 'banned' ? `<button class="btn btn-outline btn-sm" onclick="moderateStudent(${s.user_id}, 'unban')">Unban</button>` : `<button class="btn btn-outline btn-sm" onclick="moderateStudent(${s.user_id}, 'remove')">Remove</button><button class="btn btn-outline btn-sm btn-danger" onclick="moderateStudent(${s.user_id}, 'ban')">Ban</button>`}
         </td>
       </tr>
     `).join("")}
   `;
+  } catch (err) {
+    document.getElementById('studentsRosterTable').innerHTML = `<tr><td>${escapeHtml(err.message)}</td></tr>`;
+  }
 }
 
 async function moderateStudent(studentId, action) {
-  const reason = prompt(`Reason for ${action}ing student:`, "Disciplinary policy violation");
-  if (reason === null) return;
-  await apiFetch(`/courses/${currentCourseId}/students/${studentId}/moderate`, { method: "POST", body: JSON.stringify({ action, reason }) });
-  alert(`Student ${action}ed.`);
-  loadEnrolledStudents();
+  const verb = action === 'unban' ? 'lift this course ban' : `${action} this student`;
+  if (!confirm(`Are you sure you want to ${verb}?`)) return;
+  const reason = action === 'ban' ? prompt('Reason for the ban:', 'Course policy violation') : undefined;
+  if (action === 'ban' && reason === null) return;
+  try {
+    await apiFetch(`/courses/${currentCourseId}/students/${studentId}/moderate`, { method: "POST", body: JSON.stringify({ action, reason }) });
+    await loadEnrolledStudents();
+  } catch (err) { alert(err.message); }
 }

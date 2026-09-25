@@ -11,6 +11,9 @@
     .tab-bar { display:flex; gap:0.5rem; border-bottom:2px solid var(--border); margin-bottom:1.5rem; overflow-x:auto; }
     .tab-btn { padding:0.75rem 1.25rem; border:none; background:none; font-weight:600; color:var(--gray-500); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; }
     .tab-btn.active { color:var(--primary); border-color:var(--primary); }
+    .image-drop-zone { display:flex; align-items:center; justify-content:center; gap:.65rem; flex-wrap:wrap; padding:1rem; border:2px dashed var(--gray-300); border-radius:var(--radius); color:var(--gray-700); background:var(--gray-50); text-align:center; cursor:pointer; }
+    .image-drop-zone.drag-active { border-color:var(--primary); background:var(--primary-light); }
+    .image-drop-zone small { flex-basis:100%; color:var(--gray-500); }
   </style>
 </head>
 <body>
@@ -34,6 +37,18 @@
       <main class="content-body">
         <div class="card" style="margin-bottom:1.5rem; overflow:hidden; padding:0;">
           <img id="courseBanner" style="width:100%; height:220px; object-fit:cover; background:#e2e8f0;" src="" alt="Cover">
+          <div id="courseBannerTools" class="course-banner-tools" style="display:none; padding:1rem 1.5rem 0;">
+            <input id="courseBannerFile" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+            <div id="courseBannerDrop" class="image-drop-zone" tabindex="0" role="button" aria-label="Choose or drop a course banner image">
+              <i class="fa-solid fa-cloud-arrow-up"></i><strong>Drop a banner image here</strong><span>or</span>
+              <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('courseBannerFile').click()">Browse files</button>
+              <small>JPEG, PNG, or WebP up to 4 MB</small>
+            </div>
+            <div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+              <button type="button" class="btn btn-primary btn-sm" id="saveCourseBannerBtn" onclick="saveCourseBanner()" disabled>Save banner</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="toggleBannerUploader(false)">Cancel</button>
+            </div>
+          </div>
           <div style="padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
             <div>
               <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">

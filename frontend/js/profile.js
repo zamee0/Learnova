@@ -10,10 +10,10 @@ async function loadMyProfile() {
   const u = await apiFetch("/users/me");
   document.getElementById("profFirst").value = u.first_name || '';
   document.getElementById("profLast").value = u.last_name || '';
-  document.getElementById("profAvatar").value = u.avatar_url || '';
-  document.getElementById("profQualifications").value = JSON.stringify(u.qualifications || [], null, 2);
+  document.getElementById("profAvatar").value = u.avatar_url && !u.avatar_url.startsWith('data:image/') ? u.avatar_url : '';
+  if (u.role === 'teacher') renderQualifications(u.qualifications?.length ? u.qualifications : (u.qualification ? [{ degree:u.qualification, institute:'', experience:'', certifications:'' }] : []));
   const preview = document.getElementById('avatarPreview');
-  if (u.avatar_url) { preview.src = u.avatar_url; preview.style.display = 'block'; }
+  preview.src = u.avatar_url || '/images/default-avatar.svg'; preview.style.display = 'block';
   document.getElementById("profBio").value = u.bio || '';
   document.getElementById("profPhone").value = u.phone || '';
   document.getElementById("profAddress").value = u.address || '';
@@ -26,13 +26,12 @@ async function loadMyProfile() {
     document.getElementById("studentEditFields").style.display = "none";
     document.getElementById("teacherEditFields").style.display = "block";
     document.getElementById("profDesignation").value = u.designation || '';
-    document.getElementById("profQualification").value = u.qualification || '';
   }
 
   const c = document.getElementById("myProfileCard");
   c.innerHTML = `
-    <div style="display:flex; gap:1.5rem; align-items:center; margin-bottom:1.5rem;">
-      <img src="${u.avatar_url || '/images/default-avatar.svg'}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:2px solid var(--primary);">
+    <div class="profile-hero" style="margin-bottom:1rem;">
+      <img src="${escapeHtml(u.avatar_url || '/images/default-avatar.svg')}" alt="${escapeHtml(u.first_name)} ${escapeHtml(u.last_name)} profile picture">
       <div>
         <h2 style="font-size:1.5rem;">${escapeHtml(u.first_name)} ${escapeHtml(u.last_name)}</h2>
         <p style="color:var(--gray-500);">${escapeHtml(u.email)} • <span class="badge badge-primary">${escapeHtml(u.role)}</span></p>
@@ -41,14 +40,14 @@ async function loadMyProfile() {
       </div>
     </div>
     <p style="color:var(--gray-700); margin-bottom:1.5rem;">${escapeHtml(u.bio || 'No bio added yet. Click edit below to add one.')}</p>
-    ${u.qualifications?.length ? `<h4>Qualifications</h4>${u.qualifications.map(q=>`<p>${escapeHtml(q.degree)} · ${escapeHtml(q.institute)} · ${escapeHtml(q.experience)} · ${escapeHtml(q.certifications)}</p>`).join('')}` : ''}
+    ${u.qualifications?.length ? `<h4 style="margin:.8rem 0 .4rem">Qualifications</h4><div class="qualification-list">${u.qualifications.map(q=>`<p><strong>${escapeHtml(q.degree)}</strong> - ${escapeHtml(q.institute)}<br><small>${escapeHtml(q.experience)} · ${escapeHtml(q.certifications)}</small></p>`).join('')}</div>` : ''}
 
     <h4><i class="fa-solid fa-award"></i> Verified Course Checkpoints</h4>
     <div style="margin-top:0.5rem;">
       ${u.checkpoints && u.checkpoints.length ? u.checkpoints.map(cp => `
         <div style="background:var(--gray-50); padding:0.75rem; border-radius:6px; margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center;">
-          <strong>${cp.course_title}</strong>
-          <span class="badge badge-success">${cp.checkpoint_code}</span>
+          <strong>${escapeHtml(cp.course_title)}</strong>
+          <span class="badge badge-success">${escapeHtml(cp.checkpoint_code)}</span>
         </div>
       `).join("") : '<p style="color:var(--gray-500); font-size:0.85rem;">No completed course checkpoints yet.</p>'}
     </div>
@@ -73,28 +72,52 @@ async function loadProfileInsights() {
 
 async function saveProfileUpdates(e) {
   e.preventDefault();
-  const first_name = document.getElementById("profFirst").value;
-  const last_name = document.getElementById("profLast").value;
-  const avatar_url = document.getElementById("profAvatar").value;
-  const bio = document.getElementById("profBio").value;
-  const phone = document.getElementById("profPhone").value;
-  const address = document.getElementById("profAddress").value;
-  const institution = document.getElementById("profInstitution")?.value;
-  const semester = document.getElementById("profSemester")?.value;
-  const designation = document.getElementById("profDesignation")?.value;
-  const qualification = document.getElementById("profQualification")?.value;
-  let qualifications;
-  try { qualifications = JSON.parse(document.getElementById('profQualifications')?.value || '[]'); }
-  catch { alert('Qualifications must be a valid JSON array.'); return; }
+  const status = document.getElementById('profileSaveStatus'), button = document.getElementById('saveProfileButton');
+  const current = getCurrentUser();
+  const first_name = document.getElementById("profFirst").value.trim(), last_name = document.getElementById("profLast").value.trim();
+  const avatar_url = document.getElementById("profAvatar").value.trim() || null, bio = document.getElementById("profBio").value.trim();
+  const phone = document.getElementById("profPhone").value.trim(), address = document.getElementById("profAddress").value.trim();
+  const institution = document.getElementById("profInstitution")?.value.trim(), semester = document.getElementById("profSemester")?.value.trim();
+  const designation = document.getElementById("profDesignation")?.value.trim();
+  const qualifications = current?.role === 'teacher' ? [...document.querySelectorAll('.qualification-row')].map(row => Object.fromEntries([...row.querySelectorAll('[data-qualification]')].map(input => [input.dataset.qualification, input.value.trim()]))) : undefined;
+  const qualification = qualifications?.[0]?.degree;
+  if (!first_name || !last_name) { status.textContent = 'Enter your first and last name.'; return; }
+  if (current?.role === 'teacher' && (!qualifications.length || qualifications.some(q => ['degree','institute','experience'].some(key => !q[key]) || Object.values(q).some(v => v.length > 250)))) { status.textContent = 'Add a qualification and complete its degree, institute, and experience.'; return; }
+  button.disabled = true; status.textContent = 'Saving...';
+  try {
+    const saved = await apiFetch("/users/profile", { method: "PUT", body: JSON.stringify({ first_name, last_name, avatar_url, bio, phone, address, institution, semester, designation, qualification, qualifications }) });
+    const stored = getCurrentUser();
+    localStorage.setItem('user', JSON.stringify({ ...stored, first_name, last_name, avatar_url:saved.user.avatar_url }));
+    document.querySelectorAll('.current-user-avatar img').forEach(img => { img.src = saved.user.avatar_url || '/images/default-avatar.svg'; });
+    status.textContent = 'Profile saved.';
+    await loadMyProfile();
+  } catch (err) { status.textContent = err.message; }
+  finally { button.disabled = false; }
+}
 
-  await apiFetch("/users/profile", {
-    method: "PUT",
-    body: JSON.stringify({ first_name, last_name, avatar_url, bio, phone, address, institution, semester, designation, qualification, qualifications })
+function renderQualifications(items = []) {
+  const list = document.getElementById('qualificationRows');
+  list.replaceChildren();
+  if (!items.length) addQualificationRow();
+  else items.forEach(addQualificationRow);
+}
+
+function addQualificationRow(value = {}) {
+  const row = document.createElement('fieldset');
+  row.className = 'qualification-row';
+  const legend = document.createElement('legend'); legend.textContent = 'Qualification'; row.append(legend);
+  const fields = [['degree','Degree'],['institute','Institute'],['experience','Experience'],['certifications','Certifications']];
+  fields.forEach(([key,label]) => {
+    const group=document.createElement('div'); group.className='form-group';
+    const caption=document.createElement('label'); caption.className='form-label'; caption.textContent=label;
+    const input=document.createElement(key === 'certifications' ? 'textarea' : 'input');
+    if (input.tagName === 'TEXTAREA') input.rows=2;
+    input.className='form-control'; input.required=key !== 'certifications'; input.maxLength=250; input.dataset.qualification=key; input.value=value[key] || '';
+    input.id=`qualification-${document.querySelectorAll('.qualification-row').length}-${key}-${row.children.length}`; caption.htmlFor=input.id;
+    group.append(caption,input); row.append(group);
   });
-  const stored = getCurrentUser();
-  localStorage.setItem('user', JSON.stringify({ ...stored, first_name, last_name, avatar_url }));
-  alert("Profile updated successfully!");
-  loadMyProfile();
+  const remove=document.createElement('button'); remove.type='button'; remove.className='btn btn-outline btn-sm'; remove.textContent='Remove'; remove.addEventListener('click',()=>row.remove());
+  row.append(remove); document.getElementById('qualificationRows').append(row);
 }
 
 function setProfileImage(file) {
@@ -110,13 +133,22 @@ function setProfileImage(file) {
     const preview = document.getElementById('avatarPreview'); preview.src = result; preview.style.display = 'block';
     URL.revokeObjectURL(image.src);
   };
+  image.onerror = () => { URL.revokeObjectURL(image.src); alert('That image could not be opened.'); };
   image.src = URL.createObjectURL(file);
 }
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('profAvatarFile')?.addEventListener('change', e => setProfileImage(e.target.files[0]));
+  document.getElementById('profAvatar')?.addEventListener('input', e => {
+    const value=e.target.value.trim(), preview=document.getElementById('avatarPreview');
+    if (value && /^https?:\/\//i.test(value)) { preview.src=value; preview.style.display='block'; }
+  });
   const drop = document.getElementById('avatarDrop');
-  drop?.addEventListener('dragover', e => { e.preventDefault(); });
-  drop?.addEventListener('drop', e => { e.preventDefault(); setProfileImage(e.dataTransfer.files[0]); });
+  const input = document.getElementById('profAvatarFile');
+  drop?.addEventListener('click', e => { if (e.target === drop || e.target.closest('strong, span, i, small')) input.click(); });
+  drop?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+  drop?.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-active'); });
+  drop?.addEventListener('dragleave', () => drop.classList.remove('drag-active'));
+  drop?.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-active'); setProfileImage(e.dataTransfer.files[0]); });
 });
 
 let searchTimeout;
