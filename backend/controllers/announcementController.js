@@ -50,6 +50,10 @@ exports.createAnnouncement = async (req, res, next) => {
     const { course_id, title, content } = req.body;
     const courseId = parseInt(course_id, 10);
 
+    if (!Number.isInteger(courseId) || courseId <= 0 || typeof title !== 'string' || !title.trim() || title.trim().length > 200 || typeof content !== 'string' || !content.trim() || content.trim().length > 10000) {
+      return res.status(400).json({ error: "Select a course and provide an announcement title and content." });
+    }
+
     const courseCheck = await pool.query("SELECT id, title FROM courses WHERE id = $1 AND teacher_id = $2", [courseId, teacherId]);
     if (courseCheck.rows.length === 0) {
       return res.status(403).json({ error: "You can only post announcements for courses you teach." });
